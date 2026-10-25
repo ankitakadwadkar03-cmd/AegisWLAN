@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Machine Learning datasets/models
+backend/training/datasets/
+*.pcap
+*.pcapng
+
+# Node
+node_modules/
+frontend/dist/
+
+# Environment variables
+.env
+
+# Database temporary files
+*.db-journal
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+# NetShield runtime scan data
+backend/data/scan_results/
+
+# NetShield runtime packet data
+backend/data/packet_logs/
+
+backend/ml/data/raw/
+backend/ml/data/processed/
+
+# Generated AWID3 preprocessing/training data
+backend/data/*.csv
+
+# Local databases
+backend/data/*.db
+backend/data/*.sqlite
+backend/data/*.sqlite3
+
+# Experimental AWID3 models
+backend/ml/models/random_forest_awid3.joblib
+backend/ml/models/random_forest_awid3_v2.joblib
+backend/ml/models/random_forest_awid3_v3.joblib
+backend/ml/models/random_forest_awid3_v3_1_*.joblib
+backend/ml/models/random_forest_awid3_v3_coverage_experiment.joblib
+
+# Local development patches
+*.patch
