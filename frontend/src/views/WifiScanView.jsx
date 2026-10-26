@@ -4,14 +4,7 @@ import {
   getValue,
   getInterfaceName,
 } from '../utils/helpers'
-import {
-  IconWifi,
-  IconPlay,
-  IconSquare,
-  IconSearch,
-  IconLock,
-  IconUnlock,
-} from '../components/Icons'
+import { IconWifi } from '../components/Icons'
 
 export const WifiScanView = ({
   wifiScanError,
@@ -20,14 +13,14 @@ export const WifiScanView = ({
   isScannerStopping,
   isScannerActive,
   scannerStatus,
-  selectableInterfaces,
+  selectableInterfaces = [],
   selectedInterfaceName,
   setSelectedInterfaceName,
   selectedInterface,
   wirelessAdapter,
-  scannerProgress,
-  networks,
-  filteredScanNetworks,
+  scannerProgress = {},
+  networks = [],
+  filteredScanNetworks = [],
   startScanDisabled,
   stopScanDisabled,
   handleStartScan,
@@ -37,20 +30,20 @@ export const WifiScanView = ({
   setScanSearch,
   scanFilter,
   setScanFilter,
-  setActiveView,
+  handleOpenConnectModal,
 }) => {
-  const channelCount = networks.length
-
   return (
-    <section className="wifi-scan-view" aria-label="Wi-Fi spectrum scan">
-      {wifiScanError && <p className="error-banner">{wifiScanError}</p>}
+    <div className="wifi-scan-view" aria-label="Wi-Fi scan">
+      {wifiScanError ? <p className="error-banner">{wifiScanError}</p> : null}
 
-      {/* Control & Telemetry Panel */}
-      <div className="panel scan-control-panel">
-        <div className="control-bar-row">
-          <div className="control-bar-info">
-            <div className="control-title-group">
-              <h2 className="section-title">Wi-Fi Spectrum Scanner</h2>
+      {/* Unified Control & Telemetry Bar (Original NetShield Design) */}
+      <section className="panel wifi-scan-control-panel">
+        <div className="scan-control-row">
+          <div className="scan-control-left">
+            <div className="scan-title-wrap">
+              <h2 className="scan-page-title">
+                Wi-Fi Spectrum Scanner
+              </h2>
               <span
                 className={`badge ${
                   isScannerRunning
@@ -62,99 +55,92 @@ export const WifiScanView = ({
               >
                 {formatValue(
                   getValue(scannerStatus, ['state', 'scanner_state', 'status']) ||
-                    (isScannerRunning ? 'Scanning' : 'Idle')
+                    (isScannerRunning ? 'Running' : 'Idle'),
                 )}
               </span>
             </div>
 
-            <div className="meta-pills-row">
-              {selectableInterfaces.length > 1 ? (
-                <label className="adapter-select-label">
-                  <span>Interface:</span>
-                  <select
-                    disabled={isScannerActive}
-                    onChange={(e) => setSelectedInterfaceName(e.target.value)}
-                    value={selectedInterfaceName}
-                    className="adapter-select"
-                  >
-                    {selectableInterfaces.map((adapter) => {
-                      const name = getInterfaceName(adapter)
-                      return (
-                        <option key={name} value={name}>
-                          {name}
-                        </option>
-                      )
-                    })}
-                  </select>
-                </label>
-              ) : (
-                <span className="scan-meta-pill">
-                  Interface: <strong>{selectedInterface || 'None Detected'}</strong>
-                </span>
-              )}
-
-              {wirelessAdapter && (
-                <span className="scan-meta-pill">
-                  Mode: <strong>{formatValue(getValue(wirelessAdapter, ['mode']))}</strong>
-                </span>
-              )}
-
+            {selectableInterfaces.length > 1 ? (
+              <label className="adapter-select-inline">
+                <span>Interface:</span>
+                <select
+                  disabled={isScannerActive}
+                  onChange={(e) => setSelectedInterfaceName(e.target.value)}
+                  value={selectedInterfaceName}
+                >
+                  {selectableInterfaces.map((adapter) => {
+                    const adapterName = getInterfaceName(adapter)
+                    return (
+                      <option key={adapterName} value={adapterName}>
+                        {adapterName}
+                      </option>
+                    )
+                  })}
+                </select>
+              </label>
+            ) : (
               <span className="scan-meta-pill">
-                Discovered:{' '}
-                <strong style={{ color: 'var(--accent-text)' }}>
-                  {formatValue(getValue(scannerProgress, ['session_network_count']) || channelCount)} APs
-                </strong>
+                Interface: <strong>{selectedInterface || 'None'}</strong>
               </span>
+            )}
 
-              {isScannerRunning && (
-                <span className="scan-meta-pill">
-                  Sweep: <strong>#{formatValue(getValue(scannerProgress, ['sweep_number']) || 1)}</strong> (Ch{' '}
-                  {formatValue(getValue(scannerProgress, ['current_channel']) || '--')})
-                </span>
-              )}
-            </div>
+            {wirelessAdapter ? (
+              <span className="scan-meta-pill">
+                Mode: <strong>{formatValue(getValue(wirelessAdapter, ['mode']))}</strong>
+              </span>
+            ) : null}
+
+            <span className="scan-meta-pill">
+              Sweep: <strong>#{formatValue(getValue(scannerProgress, ['sweep_number']) || 1)}</strong> (Ch{' '}
+              {formatValue(getValue(scannerProgress, ['current_channel']) || '--')} &bull;{' '}
+              {formatValue(getValue(scannerProgress, ['channels_completed']) || 0)}/
+              {formatValue(getValue(scannerProgress, ['total_channels']) || 14)})
+            </span>
+
+            <span className="scan-meta-pill">
+              Discovered:{' '}
+              <strong style={{ color: 'var(--accent-text)' }}>
+                {formatValue(getValue(scannerProgress, ['session_network_count']) || networks.length)} APs
+              </strong>
+            </span>
           </div>
 
-          <div className="control-bar-actions">
+          <div className="scan-control-right">
             <button
-              className="btn btn-primary"
+              className="scan-button primary"
               disabled={startScanDisabled}
               onClick={handleStartScan}
               type="button"
             >
-              <IconPlay size={14} />
-              <span>{isScannerStarting ? 'Starting...' : isScannerRunning ? 'Scanning...' : 'Start Scan'}</span>
+              {isScannerStarting ? 'Starting...' : isScannerRunning ? 'Scanning...' : 'Start Scan'}
             </button>
             <button
-              className="btn btn-secondary"
+              className="scan-button"
               disabled={stopScanDisabled}
               onClick={handleStopScan}
               type="button"
             >
-              <IconSquare size={14} />
-              <span>{isScannerStopping ? 'Stopping...' : 'Stop Scan'}</span>
+              {isScannerStopping ? 'Stopping...' : 'Stop Scan'}
             </button>
           </div>
         </div>
 
-        {/* Warning if no wireless adapter is present */}
-        {!wirelessAdapter && !wifiScanLoading && (
+        {!wirelessAdapter && !wifiScanLoading ? (
           <div className="empty-state-notice">
             <p>
-              <strong>Notice:</strong> No compatible wireless adapter was detected on this operating system. Active channel sweeping requires a compatible Wi-Fi interface (e.g., in Linux / Kali). Any previously cached networks are listed below.
+              No wireless adapter detected. Connect a compatible Wi-Fi adapter to enable channel sweeping.
             </p>
           </div>
-        )}
+        ) : null}
 
-        {/* Search & Filter Toolbar */}
-        <div className="scan-toolbar">
+        {/* Filter Toolbar */}
+        <div className="scan-filter-toolbar">
           <div className="search-box">
-            <IconSearch size={16} className="search-icon" />
             <input
               aria-label="Filter networks by SSID, BSSID, or Vendor"
               className="search-input"
               onChange={(e) => setScanSearch(e.target.value)}
-              placeholder="Search by SSID, BSSID, vendor, or security..."
+              placeholder="Search by SSID, BSSID, or vendor..."
               type="text"
               value={scanSearch}
             />
@@ -207,42 +193,22 @@ export const WifiScanView = ({
             </button>
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* Networks Table */}
-      <div className="panel networks-panel">
-        <div className="panel-header">
-          <div>
-            <h3>Discovered Wireless Access Points</h3>
-            <p className="panel-subtitle">
-              Showing {filteredScanNetworks.length} of {networks.length} networks matching current criteria.
-            </p>
-          </div>
-          {networks.length > 0 && (
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              onClick={() => setActiveView('Network Recommendations')}
-            >
-              Analyze with ML QoS &rarr;
-            </button>
-          )}
-        </div>
-
+      {/* Scanned Networks Table Panel */}
+      <section className="panel networks-panel">
         {wifiScanLoading && networks.length === 0 ? (
-          <div className="empty-state">
-            <p className="empty-state-title">Loading Scanned Networks...</p>
-          </div>
+          <p className="muted-text" style={{ padding: '24px' }}>Loading scanned networks...</p>
         ) : networks.length > 0 ? (
-          <div className="table-wrap">
+          <div className="table-wrap wifi-scan-table-scroll">
             <table>
               <thead>
                 <tr>
                   <th>SSID &amp; Access Point</th>
                   <th>Band &amp; Channel</th>
                   <th>Signal Strength</th>
-                  <th>Security / Encryption</th>
-                  <th>Actions</th>
+                  <th>Encryption / Security</th>
+                  <th style={{ width: '100px', textAlign: 'right' }}>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -255,63 +221,41 @@ export const WifiScanView = ({
                     const band = ch >= 36 ? '5 GHz' : ch > 0 ? '2.4 GHz' : 'Auto'
                     const sigRaw = formatValue(getValue(network, ['signal', 'Signal']))
                     const sigNum = parseInt(String(sigRaw || '').replace(/[^0-9-]/g, ''), 10)
-                    const enc = formatValue(getValue(network, ['encryption', 'security']))
+                    const enc = formatValue(getValue(network, ['encryption', 'Encryption', 'security']))
                     const isOpen = String(enc || '').toUpperCase().includes('OPEN') || enc === 'None' || !enc
-
-                    // Signal percentage for visual meter (-100 dBm is 0%, -40 dBm is 100%)
-                    const sigPct = Math.min(100, Math.max(0, ((sigNum + 100) / 60) * 100))
 
                     return (
                       <tr key={bssid || index}>
                         <td>
                           <div className="net-ssid-cell">
                             <strong>{ssid || '<Hidden SSID>'}</strong>
-                            <span className="mono-val net-bssid-sub">{bssid || 'Unknown BSSID'}</span>
-                            {vendor && vendor !== 'Unknown Vendor' && vendor !== 'Unknown' && (
+                            <span className="net-bssid-sub">{bssid || 'Unknown BSSID'}</span>
+                            {vendor && vendor !== 'Unknown Vendor' && vendor !== 'Unknown' ? (
                               <span className="net-vendor-chip">{vendor}</span>
-                            )}
+                            ) : null}
                           </div>
                         </td>
                         <td>
-                          <div className="band-cell">
-                            <span className="mono-val">Ch {ch || '?'}</span>
-                            <span className="band-sub">{band}</span>
-                          </div>
+                          <span className="mono-val">Ch {ch || '?'}</span>
+                          <span className="band-sub">{band}</span>
                         </td>
                         <td>
-                          <div className="signal-cell">
-                            <span
-                              className="mono-val"
-                              style={{
-                                color:
-                                  sigNum >= -65
-                                    ? '#2dd4bf'
-                                    : sigNum >= -75
-                                      ? '#38bdf8'
-                                      : sigNum >= -85
-                                        ? '#fbbf24'
-                                        : '#f87171',
-                              }}
-                            >
-                              {sigRaw || '--'}
-                            </span>
-                            <div className="signal-bar-track">
-                              <div
-                                className="signal-bar-fill"
-                                style={{
-                                  width: `${sigPct}%`,
-                                  backgroundColor:
-                                    sigNum >= -65
-                                      ? '#2dd4bf'
-                                      : sigNum >= -75
-                                        ? '#38bdf8'
-                                        : sigNum >= -85
-                                          ? '#fbbf24'
-                                          : '#f87171',
-                                }}
-                              />
-                            </div>
-                          </div>
+                          <span
+                            className="mono-val"
+                            style={{
+                              color:
+                                sigNum >= -65
+                                  ? 'var(--success-text)'
+                                  : sigNum >= -75
+                                    ? 'var(--accent)'
+                                    : sigNum >= -85
+                                      ? 'var(--warning-text)'
+                                      : 'var(--danger-text)',
+                              fontWeight: 600,
+                            }}
+                          >
+                            {sigRaw || '--'}
+                          </span>
                         </td>
                         <td>
                           <span
@@ -319,25 +263,27 @@ export const WifiScanView = ({
                               isOpen ? 'badge-severity-high' : 'badge-status-resolved'
                             }`}
                           >
-                            {isOpen ? (
-                              <>
-                                <IconUnlock size={12} /> Open
-                              </>
-                            ) : (
-                              <>
-                                <IconLock size={12} /> {enc || 'WPA2/WPA3'}
-                              </>
-                            )}
+                            {enc || 'Open'}
                           </span>
                         </td>
-                        <td>
+                        <td style={{ textAlign: 'right' }}>
                           <button
                             type="button"
-                            className="btn btn-secondary btn-sm"
-                            onClick={() => setActiveView('Network Recommendations')}
-                            title="Evaluate quality with the ML Recommendation Engine"
+                            className="scan-button small"
+                            onClick={() => {
+                              if (handleOpenConnectModal) {
+                                handleOpenConnectModal({
+                                  ssid,
+                                  bssid,
+                                  channel: ch,
+                                  signal: sigRaw,
+                                  encryption: enc,
+                                  vendor,
+                                })
+                              }
+                            }}
                           >
-                            QoS Rank
+                            Connect
                           </button>
                         </td>
                       </tr>
@@ -345,13 +291,20 @@ export const WifiScanView = ({
                   })
                 ) : (
                   <tr>
-                    <td colSpan="5">
-                      <div className="empty-state" style={{ padding: '24px' }}>
-                        <p className="empty-state-title">No Networks Matched Your Search</p>
-                        <p className="empty-state-text">
-                          Try adjusting your search query or reset filter chips.
-                        </p>
-                      </div>
+                    <td colSpan={5} style={{ textAlign: 'center', padding: '32px' }}>
+                      <p style={{ color: 'var(--text-strong)', marginBottom: '8px' }}>
+                        No networks match &ldquo;{scanSearch}&rdquo;
+                      </p>
+                      <button
+                        className="scan-button"
+                        onClick={() => {
+                          setScanSearch('')
+                          setScanFilter('all')
+                        }}
+                        type="button"
+                      >
+                        Clear Filter
+                      </button>
                     </td>
                   </tr>
                 )}
@@ -359,17 +312,27 @@ export const WifiScanView = ({
             </table>
           </div>
         ) : (
-          <div className="empty-state">
-            <div className="empty-state-icon">
+          <div className="empty-state" style={{ padding: '36px 20px', textAlign: 'center' }}>
+            <div style={{ display: 'inline-flex', padding: '12px', borderRadius: '50%', background: 'var(--nav-selected)', color: 'var(--accent)', marginBottom: '12px' }}>
               <IconWifi size={28} />
             </div>
-            <p className="empty-state-title">No Wi-Fi Networks Discovered</p>
-            <p className="empty-state-text">
-              Click &ldquo;Start Scan&rdquo; above to sweep available Wi-Fi channels and discover nearby access points.
+            <p style={{ fontWeight: 600, color: 'var(--text-strong)', margin: '0 0 6px' }}>
+              No scanned networks are available.
             </p>
+            <p className="muted-text" style={{ margin: '0 0 16px', fontSize: '13px' }}>
+              Click Start Scan to discover nearby wireless access points.
+            </p>
+            <button
+              className="scan-button primary"
+              disabled={startScanDisabled}
+              onClick={handleStartScan}
+              type="button"
+            >
+              Start Scan
+            </button>
           </div>
         )}
-      </div>
-    </section>
+      </section>
+    </div>
   )
 }

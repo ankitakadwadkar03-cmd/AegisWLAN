@@ -92,13 +92,13 @@ export const ReportsView = ({
           <article
             className="telemetry-card"
             style={{
-              borderTop: reportHighSeverity > 0 ? '3px solid #ef4444' : '3px solid #10b981',
+              borderTop: reportHighSeverity > 0 ? '3px solid var(--danger)' : '3px solid var(--success)',
             }}
           >
             <span className="telemetry-card-label">High Severity</span>
             <strong
               className="telemetry-card-val"
-              style={{ color: reportHighSeverity > 0 ? '#f87171' : '#34d399' }}
+              style={{ color: reportHighSeverity > 0 ? 'var(--danger-text)' : 'var(--success-text)' }}
             >
               {formatValue(reportHighSeverity)}
             </strong>

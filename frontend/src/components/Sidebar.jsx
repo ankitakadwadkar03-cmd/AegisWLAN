@@ -4,11 +4,11 @@ import { navGroups } from '../utils/navigation'
 export const Sidebar = ({ activeView, setActiveView, isCaptureRunning, newIncidentsCount }) => {
   return (
     <aside className="sidebar" aria-label="Primary navigation">
-      <div className="brand" onClick={() => setActiveView('Dashboard')} style={{ cursor: 'pointer' }}>
+      <div className="brand" onClick={() => setActiveView('WiFi Scan')} style={{ cursor: 'pointer' }}>
         <span className="brand-mark">NS</span>
         <div>
           <p className="brand-name">NetShield</p>
-          <p className="brand-subtitle">WIDS &bull; AWID3</p>
+          <p className="brand-subtitle">Wi-Fi Security</p>
         </div>
       </div>
 

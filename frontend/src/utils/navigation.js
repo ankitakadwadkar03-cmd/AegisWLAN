@@ -1,5 +1,4 @@
 import {
-  IconDashboard,
   IconWifi,
   IconActivity,
   IconCpu,
@@ -14,7 +13,6 @@ export const navGroups = [
   {
     group: 'MONITOR',
     items: [
-      { id: 'Dashboard', label: 'Dashboard', icon: IconDashboard },
       { id: 'WiFi Scan', label: 'Wi-Fi Scan', icon: IconWifi },
       { id: 'Live Monitor', label: 'Live Monitor', icon: IconActivity },
     ],
@@ -32,6 +30,11 @@ export const navGroups = [
     items: [
       { id: 'Incidents', label: 'Incidents', icon: IconShieldAlert },
       { id: 'Reports', label: 'Reports', icon: IconReports },
+    ],
+  },
+  {
+    group: 'SETTINGS',
+    items: [
       { id: 'Settings', label: 'Settings', icon: IconSettings },
     ],
   },

@@ -1,30 +1,69 @@
 :root {
-  --surface: #080d1a;
-  --surface-alt: #0b1120;
-  --panel: #0f172a;
-  --panel-muted: #1e293b;
-  --border: rgba(56, 189, 248, 0.16);
-  --border-strong: rgba(56, 189, 248, 0.28);
-  --text: #cbd5e1;
-  --text-muted: #94a3b8;
-  --text-strong: #f8fafc;
-  --accent: #14b8a6;
-  --accent-hover: #0d9488;
-  --accent-light: rgba(20, 184, 166, 0.15);
-  --accent-text: #2dd4bf;
-  --danger: #ef4444;
-  --danger-light: rgba(239, 68, 68, 0.18);
-  --danger-text: #f87171;
-  --warning: #f59e0b;
-  --warning-light: rgba(245, 158, 11, 0.18);
-  --warning-text: #fbbf24;
-  --success: #10b981;
-  --success-light: rgba(16, 185, 129, 0.18);
-  --success-text: #34d399;
-  --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-  --sans:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
-    Roboto, 'Helvetica Neue', Arial, sans-serif;
+  /* Midnight Plum & Rose Palette */
+  --surface: #100D18;            /* Main application background */
+  --sidebar-bg: #0B0912;         /* Sidebar background */
+  --header-bg: #110E19;          /* Header background */
+  --panel: #1C1726;              /* Standard card background */
+  --panel-muted: #171320;        /* Subtle contrast sub-surfaces */
+  --panel-elevated: #262033;      /* Elevated card background */
+  --input-bg: #211B2D;           /* Input background */
+
+  /* Borders & Separators */
+  --border: #393044;             /* Borders and separators */
+  --border-subtle: #2d2637;
+  --border-strong: #4f435e;
+
+  /* Typography */
+  --text: #F5F0FA;               /* Main text */
+  --text-strong: #F5F0FA;        /* Heading & strong text */
+  --text-secondary: #B8ACBF;     /* Secondary text */
+  --text-muted: #B8ACBF;         /* Muted / secondary text */
+  --text-subtle: #8D8198;        /* Subtle / caption text */
+
+  /* Primary Accent: Soft Violet */
+  --accent: #C084FC;             /* Primary accent */
+  --accent-hover: #A855F7;       /* Primary accent hover */
+  --accent-light: rgba(192, 132, 252, 0.16); /* Accent soft tint */
+  --accent-text: #C084FC;        /* Violet text */
+  --accent-glow: rgba(192, 132, 252, 0.25);
+
+  /* Secondary Accent: Muted Rose */
+  --accent-rose: #F09AB8;        /* Secondary accent */
+  --accent-rose-hover: #E879A9;
+  --accent-rose-light: rgba(240, 154, 184, 0.16);
+  --accent-rose-text: #F09AB8;
+
+  /* Plum-to-Rose Primary Action Gradient */
+  --gradient-primary: linear-gradient(135deg, #A855F7 0%, #F09AB8 100%);
+  --gradient-primary-hover: linear-gradient(135deg, #9333EA 0%, #E879A9 100%);
+
+  /* Navigation Selected */
+  --nav-selected: #38223F;       /* Active navigation background */
+
+  /* Status Colors */
+  --danger: #FB7185;             /* Error / security alert */
+  --danger-light: rgba(251, 113, 133, 0.14);
+  --danger-text: #FB7185;
+  --danger-border: rgba(251, 113, 133, 0.35);
+
+  --warning: #FBBF24;            /* Warning */
+  --warning-light: rgba(251, 191, 36, 0.14);
+  --warning-text: #FBBF24;
+  --warning-border: rgba(251, 191, 36, 0.35);
+
+  --success: #4ADE80;            /* Success */
+  --success-light: rgba(74, 222, 128, 0.14);
+  --success-text: #4ADE80;
+  --success-border: rgba(74, 222, 128, 0.35);
+
+  /* Elevation Shadows */
+  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 8px -1px rgba(0, 0, 0, 0.45), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 12px 24px -4px rgba(0, 0, 0, 0.65), 0 4px 6px -4px rgba(0, 0, 0, 0.4);
+
+  /* Typography */
+  --mono: 'JetBrains Mono', 'Fira Code', 'SFMono-Regular', Consolas, Menlo, monospace;
+  --sans: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 
   color: var(--text);
   background: var(--surface);
@@ -45,15 +84,19 @@ body {
   margin: 0;
   background: var(--surface);
   color: var(--text);
+  overflow-x: hidden;
 }
 
 button {
   letter-spacing: 0;
+  font-family: inherit;
 }
 
 h1,
 h2,
 h3,
+h4,
+h5,
 p,
 dl {
   margin: 0;

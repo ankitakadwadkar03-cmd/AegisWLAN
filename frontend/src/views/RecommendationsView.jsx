@@ -6,8 +6,12 @@ import {
 import {
   IconStar,
   IconWifi,
-  IconBot,
   IconCheck,
+  IconAlertTriangle,
+  IconInfo,
+  IconLock,
+  IconUnlock,
+  IconCpu,
 } from '../components/Icons'
 
 export const RecommendationsView = ({
@@ -19,36 +23,38 @@ export const RecommendationsView = ({
   setRecommendationFilter,
   recommendationSort,
   setRecommendationSort,
-  filteredRecommendations,
+  filteredRecommendations = [],
   bestNetwork,
-  recList,
-  totalScannedRecs,
+  recList = [],
   handleOpenConnectModal,
-  advisorOpen,
-  setAdvisorOpen,
-  _showRankingExplanation,
-  _setShowRankingExplanation,
-  _showRunnerUpComparison,
-  _setShowRunnerUpComparison,
-  showModelBreakdown,
-  setShowModelBreakdown,
-  recommendationModelInfo,
+  handleOpenWhyDrawer,
+  _recommendationModelInfo,
   setActiveView,
 }) => {
   return (
-    <section className="recommendations-view" aria-label="Wi-Fi network recommendations">
-      {recommendationsError && <p className="error-banner">{recommendationsError}</p>}
+    <div className="recommendations-container" aria-label="Wi-Fi QoS Network Recommendations">
+      {recommendationsError && (
+        <div className="error-banner-box">
+          <IconAlertTriangle size={16} />
+          <span>{recommendationsError}</span>
+        </div>
+      )}
 
       {/* Control & Header Panel */}
-      <div className="panel scan-control-panel">
+      <div className="panel rec-control-panel">
         <div className="control-bar-row">
           <div className="control-bar-info">
             <div className="control-title-group">
-              <h2 className="section-title">Smart Wi-Fi QoS &amp; Network Recommendation</h2>
-              <span className="badge badge-rec-excellent">Random Forest QoS Model</span>
+              <h2 className="section-title">Wi-Fi Connection Recommendations</h2>
+              <span className="badge badge-subsystem-rec">
+                <IconCpu size={12} /> Wi-Fi Quality Model (12 Features)
+              </span>
+              <span className="badge badge-default">
+                {recList.length} Networks Evaluated
+              </span>
             </div>
             <p className="panel-subtitle">
-              Scan-level QoS and wireless connection scoring evaluated by a dedicated 12-feature machine learning model (distinct from AWID3 intrusion detection).
+              Intelligent ranking and 4-tier quality prediction (EXCELLENT, GOOD, FAIR, POOR) based on signal strength, channel congestion, and security standards.
             </p>
           </div>
 
@@ -60,7 +66,7 @@ export const RecommendationsView = ({
               type="button"
             >
               <IconStar size={14} />
-              <span>{recommendationsLoading ? 'Evaluating Networks...' : 'Refresh Rankings'}</span>
+              <span>{recommendationsLoading ? 'Evaluating...' : 'Refresh Rankings'}</span>
             </button>
             <button
               className="btn btn-secondary"
@@ -68,280 +74,343 @@ export const RecommendationsView = ({
               type="button"
             >
               <IconWifi size={14} />
-              <span>Wi-Fi Scan</span>
+              <span>Go to Wi-Fi Scan &rarr;</span>
             </button>
-            <button
-              className={`btn btn-secondary ${advisorOpen ? 'btn-active' : ''}`}
-              onClick={() => setAdvisorOpen(!advisorOpen)}
-              type="button"
-              title="Open AI Wi-Fi Assistant"
-            >
-              <IconBot size={14} />
-              <span>AI Advisor</span>
-            </button>
-          </div>
-        </div>
-
-        {/* 5-Stage Pipeline Progress Strip */}
-        <div className="pipeline-steps-bar">
-          <div className="pipeline-step-item">
-            <span className="step-num">1</span>
-            <span className="step-label">Spectrum Scan Ingest</span>
-          </div>
-          <span className="step-arrow">&rarr;</span>
-          <div className="pipeline-step-item">
-            <span className="step-num">2</span>
-            <span className="step-label">12-Feature Extraction</span>
-          </div>
-          <span className="step-arrow">&rarr;</span>
-          <div className="pipeline-step-item">
-            <span className="step-num">3</span>
-            <span className="step-label">Random Forest Inference</span>
-          </div>
-          <span className="step-arrow">&rarr;</span>
-          <div className="pipeline-step-item">
-            <span className="step-num">4</span>
-            <span className="step-label">4-Tier Classification</span>
-          </div>
-          <span className="step-arrow">&rarr;</span>
-          <div className="pipeline-step-item">
-            <span className="step-num">5</span>
-            <span className="step-label">Ranked Recommendation</span>
           </div>
         </div>
       </div>
 
-      {/* Hero Card: #1 Best Recommended Network */}
+      {/* HIGHLIGHTED CARD: #1 TOP RECOMMENDED NETWORK */}
       {bestNetwork ? (
-        <div className="panel best-rec-hero-card">
-          <div className="hero-rec-header">
-            <div className="hero-badge-group">
-              <span className="hero-top-badge">
-                <IconStar size={14} /> #1 TOP RECOMMENDED NETWORK
-              </span>
-              <span className={getRecommendationBadgeClass(bestNetwork.classification)}>
-                {bestNetwork.classification} Quality Tier
-              </span>
-            </div>
-
-            <div className="hero-score-badge">
-              <div className="score-val-wrap">
-                <span className="score-label">ML Score:</span>
-                <strong className="score-val">{bestNetwork.score?.toFixed(1) || '--'}</strong>
-                <span className="score-max">/ 100</span>
+        <section className="panel best-network-hero-card" aria-label="Top Recommended Network">
+          <div className="hero-card-accent-bar" />
+          <div className="hero-card-content">
+            <div className="hero-card-top">
+              <div className="hero-rank-tag">
+                <IconStar size={14} />
+                <span>#1 TOP RECOMMENDED ACCESS POINT</span>
               </div>
-              <span className="score-conf">
-                Confidence: {formatConfidence(bestNetwork.confidence_pct)}
-              </span>
+              <div className="hero-tier-tag-group">
+                <span className={getRecommendationBadgeClass(bestNetwork.classification)}>
+                  {bestNetwork.classification} Quality Tier
+                </span>
+                <span className="hero-score-badge">
+                  Score: <strong>{bestNetwork.score?.toFixed(1) || '--'}</strong> / 100
+                </span>
+                <span className="hero-conf-badge">
+                  Confidence: {formatConfidence(bestNetwork.confidence_pct)}
+                </span>
+              </div>
             </div>
-          </div>
 
-          <div className="hero-rec-body">
-            <div className="hero-rec-details">
-              <div className="hero-network-id">
-                <h3 className="hero-ssid">{bestNetwork.ssid || '<Hidden SSID>'}</h3>
-                <div className="hero-meta-row">
-                  <span className="mono-val hero-bssid">{bestNetwork.bssid || 'BSSID Unknown'}</span>
+            <div className="hero-network-title-row">
+              <div className="hero-title-details">
+                <h3 className="hero-network-ssid">{bestNetwork.ssid || '<Hidden SSID>'}</h3>
+                <div className="hero-identity-meta">
+                  <span className="mono-val hero-bssid-text">{bestNetwork.bssid || 'BSSID Unknown'}</span>
                   {bestNetwork.vendor && bestNetwork.vendor !== 'Unknown Vendor' && (
-                    <span className="net-vendor-chip">{bestNetwork.vendor}</span>
+                    <span className="vendor-pill">{bestNetwork.vendor}</span>
                   )}
+                  <span className="security-pill">
+                    {bestNetwork.security?.toLowerCase().includes('open') ? (
+                      <IconUnlock size={12} />
+                    ) : (
+                      <IconLock size={12} />
+                    )}
+                    {bestNetwork.security || 'WPA2-PSK'}
+                  </span>
                 </div>
               </div>
 
-              {bestNetwork.recommendation_reason && (
-                <p className="hero-rec-summary">
-                  {bestNetwork.recommendation_reason}
-                </p>
-              )}
+              {/* Action Buttons */}
+              <div className="hero-cta-buttons">
+                <button
+                  type="button"
+                  className="btn btn-primary btn-cta"
+                  onClick={() => handleOpenConnectModal(bestNetwork)}
+                >
+                  <IconWifi size={15} />
+                  <span>Connect to Network</span>
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-cta-secondary"
+                  onClick={() => handleOpenWhyDrawer(bestNetwork)}
+                >
+                  <IconInfo size={15} />
+                  <span>Why This Network?</span>
+                </button>
+              </div>
+            </div>
 
-              <div className="hero-stats-grid">
-                <div className="hero-stat-item">
-                  <span className="stat-label">Signal Level</span>
-                  <strong className="stat-val" style={{ color: '#2dd4bf' }}>{bestNetwork.signal}</strong>
-                </div>
-                <div className="hero-stat-item">
-                  <span className="stat-label">Frequency Band</span>
-                  <strong className="stat-val">{bestNetwork.band}</strong>
-                </div>
-                <div className="hero-stat-item">
-                  <span className="stat-label">Operating Channel</span>
-                  <strong className="stat-val">Ch {bestNetwork.channel || '?'}</strong>
-                </div>
-                <div className="hero-stat-item">
-                  <span className="stat-label">Security Protocol</span>
-                  <strong className="stat-val">{bestNetwork.security}</strong>
-                </div>
-                <div className="hero-stat-item">
-                  <span className="stat-label">Channel Congestion</span>
-                  <strong className="stat-val">
-                    {bestNetwork.features?.channel_congestion_count !== undefined
-                      ? `${bestNetwork.features.channel_congestion_count} APs`
-                      : 'Low Interference'}
-                  </strong>
-                </div>
+            {bestNetwork.recommendation_reason && (
+              <p className="hero-network-reason">
+                {bestNetwork.recommendation_reason}
+              </p>
+            )}
+
+            {/* Quick Metrics */}
+            <div className="hero-metrics-grid">
+              <div className="hero-metric-tile">
+                <span className="hero-metric-label">Signal Level</span>
+                <strong className="hero-metric-val" style={{ color: 'var(--success-text)' }}>
+                  {bestNetwork.signal || '--'}
+                </strong>
               </div>
 
-              {/* Explainability Strengths & Selection Factors */}
-              {bestNetwork.positive_factors && bestNetwork.positive_factors.length > 0 && (
-                <div className="factors-row">
-                  <span className="factors-label">Strengths &amp; Selection Factors:</span>
-                  <div className="factors-chips">
-                    {bestNetwork.positive_factors.map((f, i) => (
-                      <span key={i} className="factor-chip positive">
-                        <IconCheck size={12} />
-                        <span>{f}</span>
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
+              <div className="hero-metric-tile">
+                <span className="hero-metric-label">Frequency Band</span>
+                <strong className="hero-metric-val">
+                  {bestNetwork.band || (bestNetwork.features?.band_is_5ghz ? '5 GHz' : '2.4 GHz')}
+                </strong>
+              </div>
+
+              <div className="hero-metric-tile">
+                <span className="hero-metric-label">Operating Channel</span>
+                <strong className="hero-metric-val">Ch {bestNetwork.channel || '?'}</strong>
+              </div>
+
+              <div className="hero-metric-tile">
+                <span className="hero-metric-label">Channel Saturation</span>
+                <strong className="hero-metric-val">
+                  {bestNetwork.features?.channel_congestion_count !== undefined
+                    ? `${bestNetwork.features.channel_congestion_count} APs`
+                    : 'Low Contention'}
+                </strong>
+              </div>
             </div>
 
-            <div className="hero-rec-action-side">
-              <button
-                type="button"
-                className="btn btn-primary btn-large"
-                onClick={() => handleOpenConnectModal(bestNetwork)}
-              >
-                <span>Connect to Network &rarr;</span>
-              </button>
-            </div>
+            {/* Strengths List */}
+            {bestNetwork.positive_factors && bestNetwork.positive_factors.length > 0 && (
+              <div className="hero-factors-row" style={{ marginTop: '10px' }}>
+                <span className="hero-factors-title" style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)' }}>
+                  Key Strengths:
+                </span>
+                <div className="factors-chip-list" style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
+                  {bestNetwork.positive_factors.map((factor, idx) => (
+                    <span key={idx} className="badge badge-status-resolved" style={{ fontSize: '11px' }}>
+                      <IconCheck size={11} />
+                      <span>{factor}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
-        </div>
+        </section>
       ) : null}
 
-      {/* Filter and Sort Toolbar */}
-      <div className="panel filter-bar-panel" style={{ marginTop: '16px' }}>
-        <div className="filter-bar-content">
-          <div className="filter-group">
-            <span className="filter-label">Filter:</span>
-            <button
-              type="button"
-              className={`filter-chip ${recommendationFilter === 'all' ? 'active' : ''}`}
-              onClick={() => setRecommendationFilter('all')}
-            >
-              All ({recList.length})
-            </button>
-            <button
-              type="button"
-              className={`filter-chip ${recommendationFilter === 'recommended' ? 'active' : ''}`}
-              onClick={() => setRecommendationFilter('recommended')}
-            >
-              Recommended (Tier &ge; GOOD)
-            </button>
-            <button
-              type="button"
-              className={`filter-chip ${recommendationFilter === '5ghz' ? 'active' : ''}`}
-              onClick={() => setRecommendationFilter('5ghz')}
-            >
-              5 GHz Band
-            </button>
-            <button
-              type="button"
-              className={`filter-chip ${recommendationFilter === 'secure' ? 'active' : ''}`}
-              onClick={() => setRecommendationFilter('secure')}
-            >
-              Secured Only
-            </button>
-          </div>
+      {/* FILTER & SORT CONTROLS */}
+      {recList.length > 0 && (
+        <div className="panel" style={{ padding: '12px 18px' }}>
+          <div className="scan-filter-toolbar" style={{ border: 'none', padding: 0 }}>
+            <div className="filter-chips">
+              <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', marginRight: '4px' }}>
+                Filter:
+              </span>
+              <button
+                type="button"
+                className={`filter-chip ${recommendationFilter === 'all' ? 'active' : ''}`}
+                onClick={() => setRecommendationFilter('all')}
+              >
+                All ({recList.length})
+              </button>
+              <button
+                type="button"
+                className={`filter-chip ${recommendationFilter === 'recommended' ? 'active' : ''}`}
+                onClick={() => setRecommendationFilter('recommended')}
+              >
+                Recommended (Tier &ge; GOOD)
+              </button>
+              <button
+                type="button"
+                className={`filter-chip ${recommendationFilter === '5ghz' ? 'active' : ''}`}
+                onClick={() => setRecommendationFilter('5ghz')}
+              >
+                5 GHz Band
+              </button>
+              <button
+                type="button"
+                className={`filter-chip ${recommendationFilter === '2ghz' ? 'active' : ''}`}
+                onClick={() => setRecommendationFilter('2ghz')}
+              >
+                2.4 GHz Band
+              </button>
+            </div>
 
-          <div className="filter-group">
-            <span className="filter-label">Sort By:</span>
-            <select
-              value={recommendationSort}
-              onChange={(e) => setRecommendationSort(e.target.value)}
-              className="settings-select"
-              style={{ width: 'auto', padding: '4px 10px', fontSize: '13px' }}
-            >
-              <option value="score">ML Recommendation Score (High &rarr; Low)</option>
-              <option value="signal">Signal Strength (dBm)</option>
-              <option value="security">Security Protocol</option>
-              <option value="channel">Channel Number</option>
-            </select>
+            <div className="sort-select-group" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <label htmlFor="rec-sort-select" style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                Sort:
+              </label>
+              <select
+                id="rec-sort-select"
+                className="adapter-select"
+                value={recommendationSort}
+                onChange={(e) => setRecommendationSort(e.target.value)}
+              >
+                <option value="score">ML Quality Score</option>
+                <option value="signal">Signal Strength</option>
+                <option value="congestion">Channel Congestion</option>
+              </select>
+            </div>
           </div>
-
-          <span className="filter-results-count">
-            Showing <strong>{filteredRecommendations.length}</strong> of {totalScannedRecs} networks
-          </span>
         </div>
-      </div>
+      )}
 
-      {/* Ranked Networks List */}
-      <div className="panel ranked-networks-panel" style={{ marginTop: '16px' }}>
+      {/* RANKED NETWORKS REGISTER */}
+      <div className="panel ranked-register-panel">
         <div className="panel-header">
           <div>
-            <h3>Complete Ranked Network Register</h3>
-            <p className="panel-subtitle">Evaluated on 12 IEEE 802.11 QoS, throughput, and encryption metrics.</p>
+            <h3 className="section-title">Ranked Access Point Register</h3>
+            <p className="panel-subtitle">
+              All evaluated access points ordered by 12-feature machine learning quality score.
+            </p>
           </div>
+          {recList.length > 0 && (
+            <span className="badge badge-default">
+              {filteredRecommendations.length} of {recList.length} Access Points
+            </span>
+          )}
         </div>
 
         {recommendationsLoading && recList.length === 0 ? (
           <div className="empty-state">
-            <p className="empty-state-title">Evaluating Wi-Fi Networks with ML QoS Model...</p>
+            <p className="muted-text">Evaluating network quality rankings...</p>
+          </div>
+        ) : recList.length === 0 ? (
+          /* Empty state with Go to Wi-Fi Scan */
+          <div className="empty-state" style={{ padding: '32px 16px', textAlign: 'center' }}>
+            <div style={{ display: 'inline-flex', padding: '12px', borderRadius: '50%', background: 'var(--nav-selected)', color: 'var(--accent)', marginBottom: '10px' }}>
+              <IconWifi size={28} />
+            </div>
+            <p style={{ fontWeight: 600, color: 'var(--text-strong)', margin: '0 0 6px' }}>
+              No Evaluated Networks Available
+            </p>
+            <p className="muted-text" style={{ margin: '0 0 16px', fontSize: '13px' }}>
+              Scan nearby Wi-Fi networks first so the machine learning model can evaluate link quality.
+            </p>
+            <button
+              className="btn btn-primary"
+              onClick={() => setActiveView('WiFi Scan')}
+              type="button"
+            >
+              <IconWifi size={14} />
+              <span>Go to Wi-Fi Scan</span>
+            </button>
           </div>
         ) : filteredRecommendations.length > 0 ? (
           <div className="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th>Rank &amp; SSID</th>
-                  <th>Quality Tier</th>
-                  <th>Score / 100</th>
-                  <th>Signal</th>
+                  <th style={{ width: '60px' }}>Rank</th>
+                  <th>SSID &amp; Access Point</th>
                   <th>Band &amp; Channel</th>
+                  <th>Signal</th>
                   <th>Security</th>
-                  <th>Key Strength</th>
-                  <th>Action</th>
+                  <th>Quality Tier</th>
+                  <th>Quality Score</th>
+                  <th style={{ textAlign: 'right' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredRecommendations.map((net, idx) => {
-                  const rank = net.rank ?? idx + 1
-                  const isTop = rank === 1
+                {filteredRecommendations.map((net, index) => {
+                  const rank = net.rank || index + 1
+                  const isTopRank = rank === 1
+                  const isOpen = String(net.security || '').toLowerCase().includes('open')
+                  const sigRaw = net.signal || '--'
+                  const sigNum = parseInt(String(sigRaw).replace(/[^0-9-]/g, ''), 10)
 
                   return (
-                    <tr key={net.bssid || idx} className={isTop ? 'highlight-row' : ''}>
+                    <tr key={net.bssid || index}>
                       <td>
-                        <div className="ranked-net-name">
-                          <span className={`rank-badge ${isTop ? 'rank-1' : ''}`}>#{rank}</span>
-                          <div>
-                            <strong>{net.ssid || '<Hidden SSID>'}</strong>
-                            <span className="mono-val ranked-bssid-sub">{net.bssid || 'Unknown BSSID'}</span>
-                          </div>
+                        <span
+                          className="mono-val"
+                          style={{
+                            fontWeight: 700,
+                            color: isTopRank ? 'var(--accent)' : 'inherit',
+                          }}
+                        >
+                          #{rank}
+                        </span>
+                      </td>
+
+                      <td>
+                        <div className="net-ssid-cell">
+                          <strong>{net.ssid || '<Hidden SSID>'}</strong>
+                          <span className="net-bssid-sub">{net.bssid || 'Unknown BSSID'}</span>
+                          {net.vendor && net.vendor !== 'Unknown Vendor' && (
+                            <span className="net-vendor-chip">{net.vendor}</span>
+                          )}
                         </div>
                       </td>
+
+                      <td>
+                        <span className="mono-val">Ch {net.channel || '?'}</span>
+                        <span className="band-sub">
+                          {net.band || (net.features?.band_is_5ghz ? '5 GHz' : '2.4 GHz')}
+                        </span>
+                      </td>
+
+                      <td>
+                        <span
+                          className="mono-val"
+                          style={{
+                            color:
+                              sigNum >= -65
+                                ? 'var(--success-text)'
+                                : sigNum >= -75
+                                  ? 'var(--accent-cyan-text)'
+                                  : sigNum >= -85
+                                    ? 'var(--warning-text)'
+                                    : 'var(--danger-text)',
+                            fontWeight: 600,
+                          }}
+                        >
+                          {sigRaw}
+                        </span>
+                      </td>
+
+                      <td>
+                        <span className={`badge ${isOpen ? 'badge-severity-high' : 'badge-status-resolved'}`}>
+                          {net.security || 'WPA2'}
+                        </span>
+                      </td>
+
                       <td>
                         <span className={getRecommendationBadgeClass(net.classification)}>
                           {net.classification}
                         </span>
                       </td>
+
                       <td>
-                        <strong className="mono-val" style={{ color: 'var(--accent-text)' }}>
-                          {net.score !== undefined ? net.score.toFixed(1) : '--'}
-                        </strong>
-                      </td>
-                      <td>
-                        <span className="mono-val">{net.signal}</span>
-                      </td>
-                      <td>
-                        <span className="mono-val">{net.band} (Ch {net.channel})</span>
-                      </td>
-                      <td>
-                        <span className={`badge ${String(net.security).toLowerCase().includes('open') ? 'badge-severity-high' : 'badge-default'}`}>
-                          {net.security}
+                        <span className="mono-val" style={{ fontWeight: 700 }}>
+                          {net.score?.toFixed(1) || '--'}
                         </span>
+                        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}> / 100</span>
                       </td>
-                      <td style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                        {net.positive_factors?.[0] || net.recommendation_reason || 'Adequate signal & WPA'}
-                      </td>
-                      <td>
-                        <button
-                          type="button"
-                          className="btn btn-secondary btn-sm"
-                          onClick={() => handleOpenConnectModal(net)}
-                        >
-                          Connect
-                        </button>
+
+                      <td style={{ textAlign: 'right' }}>
+                        <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => handleOpenWhyDrawer(net)}
+                            title="Inspect why this network received this rank"
+                          >
+                            <IconInfo size={12} />
+                            <span>Why?</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            className="btn btn-primary btn-sm"
+                            onClick={() => handleOpenConnectModal(net)}
+                          >
+                            <IconWifi size={12} />
+                            <span>Connect</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   )
@@ -350,72 +419,20 @@ export const RecommendationsView = ({
             </table>
           </div>
         ) : (
-          <div className="empty-state">
-            <p className="empty-state-title">No Networks Found</p>
-            <p className="empty-state-text">
-              Run a Wi-Fi scan in the "Wi-Fi Scan" page to discover wireless networks and compute recommendations.
+          <div className="empty-state" style={{ padding: '24px', textAlign: 'center' }}>
+            <p style={{ fontWeight: 600, color: 'var(--text-strong)', margin: '0 0 6px' }}>
+              No networks match &ldquo;{recommendationFilter}&rdquo;
             </p>
             <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => setRecommendationFilter('all')}
               type="button"
-              className="btn btn-primary"
-              onClick={() => setActiveView('WiFi Scan')}
-              style={{ marginTop: '12px' }}
             >
-              Open Wi-Fi Scan &rarr;
+              Reset Filter
             </button>
           </div>
         )}
       </div>
-
-      {/* Model Specifications Collapsible Panel */}
-      <div className="panel" style={{ marginTop: '16px' }}>
-        <div
-          className="collapsible-header"
-          onClick={() => setShowModelBreakdown(!showModelBreakdown)}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault()
-              setShowModelBreakdown(!showModelBreakdown)
-            }
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span>{showModelBreakdown ? '▼' : '►'}</span>
-            <h4>Recommendation Model Details (12 Features)</h4>
-          </div>
-          <span className="badge badge-default">
-            {showModelBreakdown ? 'Collapse' : 'Expand'}
-          </span>
-        </div>
-
-        {showModelBreakdown && (
-          <div className="collapsible-body" style={{ marginTop: '12px' }}>
-            <p className="schema-intro-text">
-              The recommendation engine uses a Random Forest classifier trained on 12 distinct signal, congestion, security, and protocol metrics to rank Wi-Fi networks into EXCELLENT, GOOD, FAIR, and POOR tiers:
-            </p>
-            <div className="spec-grid" style={{ marginTop: '12px' }}>
-              <div className="spec-card">
-                <span className="spec-label">Model Name</span>
-                <strong className="spec-val mono-val">{recommendationModelInfo?.model_name || 'wifi_network_recommendation.joblib'}</strong>
-              </div>
-              <div className="spec-card">
-                <span className="spec-label">Quality Tiers</span>
-                <strong className="spec-val">EXCELLENT, GOOD, FAIR, POOR</strong>
-              </div>
-              <div className="spec-card">
-                <span className="spec-label">Feature Count</span>
-                <strong className="spec-val">12 IEEE 802.11 Metrics</strong>
-              </div>
-              <div className="spec-card">
-                <span className="spec-label">Key Deciding Factors</span>
-                <strong className="spec-val">RSSI, 5 GHz Band, Channel Overlap, WPA3/WPA2</strong>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    </section>
+    </div>
   )
 }

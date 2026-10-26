@@ -2,82 +2,102 @@ import React, { useState } from 'react'
 import {
   formatValue,
   formatProbability,
-  formatDateTime,
+  getValue,
 } from '../utils/helpers'
 import {
   IconCpu,
   IconPlay,
   IconActivity,
+  IconWifi,
+  IconAlertTriangle,
+  IconFileSearch,
+  IconChevronDown,
+  IconChevronRight,
+  IconInfo,
 } from '../components/Icons'
 
 export const MlEngineView = ({
   mlEngineTab,
   setMlEngineTab,
   mlLiveStatus,
-  mlDetectionLoading,
+  _mlDetectionLoading,
   mlDetectionError,
-  mlDatasets,
+  mlDatasets = [],
   selectedDataset,
   setSelectedDataset,
   mlTestingLoading,
   mlTestingError,
   handleRunMlTest,
   mlTestResult,
-  mlTestRuns,
   mlSchemaInfo,
   setActiveView,
+  networks = [],
 }) => {
-  const [showAdvancedSchema, setShowAdvancedSchema] = useState(false)
+  const [selectedNetworkDetails, setSelectedNetworkDetails] = useState(null)
+  const [showExtractedFeatures, setShowExtractedFeatures] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
 
-  // Categorize 31 canonical features if available
   const features = mlSchemaInfo?.features || []
 
+  // Check if genuine 31-feature inference is available
+  const hasLiveInference =
+    mlLiveStatus &&
+    mlLiveStatus.status !== 'no_inference' &&
+    mlLiveStatus.prediction !== undefined
+
+  // Filter networks if search query exists
+  const filteredNetworks = networks.filter((net) => {
+    if (!searchQuery.trim()) return true
+    const q = searchQuery.toLowerCase().trim()
+    const ssid = String(getValue(net, ['ssid', 'SSID']) || '').toLowerCase()
+    const bssid = String(getValue(net, ['bssid', 'BSSID']) || '').toLowerCase()
+    return ssid.includes(q) || bssid.includes(q)
+  })
+
   return (
-    <section className="ml-engine-view" aria-label="AWID3 Machine Learning Engine">
+    <div className="ml-engine-container" aria-label="AWID3 Machine Learning Intrusion Detector">
+      {/* Error Banners */}
       {mlEngineTab === 'live' && mlDetectionError && (
-        <p className="error-banner">{mlDetectionError}</p>
+        <div className="error-banner-box">
+          <IconAlertTriangle size={16} />
+          <span>{mlDetectionError}</span>
+        </div>
       )}
       {mlEngineTab === 'evaluation' && mlTestingError && (
-        <p className="error-banner">{mlTestingError}</p>
+        <div className="error-banner-box">
+          <IconAlertTriangle size={16} />
+          <span>{mlTestingError}</span>
+        </div>
       )}
 
-      {/* Control & Header Panel */}
-      <div className="panel scan-control-panel">
+      {/* Control & Tab Header */}
+      <div className="panel ml-control-panel">
         <div className="control-bar-row">
           <div className="control-bar-info">
             <div className="control-title-group">
-              <h2 className="section-title">AWID3 ML Intrusion Detection Engine</h2>
+              <h2 className="section-title">AWID3 Intrusion Detection Engine</h2>
+              <span className="badge badge-subsystem-awid3">
+                <IconCpu size={12} /> Random Forest (31 Features)
+              </span>
               <span
                 className={`badge ${
-                  mlLiveStatus && mlLiveStatus.status !== 'no_inference' && mlLiveStatus.prediction !== undefined
+                  hasLiveInference
                     ? mlLiveStatus.prediction === 0
                       ? 'badge-status-resolved'
                       : 'badge-severity-high'
                     : 'badge-default'
                 }`}
               >
-                {mlLiveStatus && mlLiveStatus.status !== 'no_inference' && mlLiveStatus.prediction !== undefined
+                {hasLiveInference
                   ? mlLiveStatus.prediction === 0
-                    ? 'Normal Traffic'
-                    : (mlLiveStatus.label ?? 'Attack Detected')
-                  : 'Awaiting 5s Window'}
+                    ? 'Live Verdict: Normal'
+                    : `Live Verdict: ${mlLiveStatus.label ?? 'Attack'}`
+                  : 'Live Ingest: Awaiting 5s Frame Window'}
               </span>
             </div>
-
-            <div className="meta-pills-row">
-              <span className="scan-meta-pill">
-                Model: <strong>{mlSchemaInfo?.model_name || 'random_forest_awid3_v3_expanded'}</strong>
-              </span>
-              <span className="scan-meta-pill">
-                Architecture: <strong>Random Forest (Binary: Normal vs Attack)</strong>
-              </span>
-              <span className="scan-meta-pill">
-                Schema: <strong>{mlSchemaInfo?.feature_count ?? 31} Canonical Features</strong>
-              </span>
-              <span className="scan-meta-pill">
-                Inference Window: <strong>5.0 seconds</strong>
-              </span>
-            </div>
+            <p className="panel-subtitle">
+              Analyzes raw IEEE 802.11 management, control, and data frame temporal bursts using the canonical 31-feature AWID3 classification schema.
+            </p>
           </div>
 
           <div className="control-bar-actions">
@@ -87,31 +107,32 @@ export const MlEngineView = ({
               type="button"
             >
               <IconActivity size={14} />
-              <span>Live Monitor</span>
+              <span>Live Monitor Stream &rarr;</span>
             </button>
             <button
               className="btn btn-secondary"
               onClick={() => setActiveView('PCAP Analysis')}
               type="button"
             >
-              <span>PCAP Offline Analysis &rarr;</span>
+              <IconFileSearch size={14} />
+              <span>PCAP File Analysis &rarr;</span>
             </button>
           </div>
         </div>
 
-        {/* Navigation Tabs */}
-        <div className="soc-tab-bar" role="tablist">
+        {/* Tab Navigation */}
+        <div className="ml-tab-bar" role="tablist">
           <button
-            className={`soc-tab-btn ${mlEngineTab === 'live' ? 'active' : ''}`}
+            className={`ml-tab-button ${mlEngineTab === 'live' ? 'active' : ''}`}
             onClick={() => setMlEngineTab('live')}
             type="button"
             role="tab"
             aria-selected={mlEngineTab === 'live'}
           >
-            Live Threat Inference
+            Wi-Fi Scan &amp; Threat Detection
           </button>
           <button
-            className={`soc-tab-btn ${mlEngineTab === 'evaluation' ? 'active' : ''}`}
+            className={`ml-tab-button ${mlEngineTab === 'evaluation' ? 'active' : ''}`}
             onClick={() => setMlEngineTab('evaluation')}
             type="button"
             role="tab"
@@ -120,434 +141,491 @@ export const MlEngineView = ({
             Offline Dataset Evaluation ({mlDatasets?.length || 0})
           </button>
           <button
-            className={`soc-tab-btn ${mlEngineTab === 'schema' ? 'active' : ''}`}
+            className={`ml-tab-button ${mlEngineTab === 'schema' ? 'active' : ''}`}
             onClick={() => setMlEngineTab('schema')}
             type="button"
             role="tab"
             aria-selected={mlEngineTab === 'schema'}
           >
-            Model &amp; Feature Schema (31 Features)
+            31 Canonical Feature Schema
           </button>
         </div>
       </div>
 
-      {/* TAB 1: LIVE INFERENCE */}
+      {/* =========================================================================
+         TAB 1: LIVE SCAN & THREAT INFERENCE (STATES A, B, C, D)
+         ========================================================================= */}
       {mlEngineTab === 'live' && (
-        <div className="ml-tab-content">
-          {/* Important Information Front and Center */}
-          <div className="telemetry-strip-grid">
-            <article className="telemetry-card">
-              <span className="telemetry-card-label">Inference Status</span>
-              <strong className="telemetry-card-val">
-                {mlLiveStatus && mlLiveStatus.status !== 'no_inference' ? 'Evaluating' : 'Standby'}
-              </strong>
-              <span className="telemetry-card-sub">5s Sliding Window</span>
-            </article>
-
-            <article
-              className="telemetry-card"
-              style={{
-                borderTop:
-                  mlLiveStatus?.prediction === 1
-                    ? '3px solid #ef4444'
-                    : mlLiveStatus?.prediction === 0
-                      ? '3px solid #10b981'
-                      : 'none',
-              }}
-            >
-              <span className="telemetry-card-label">Predicted Class</span>
-              <strong
-                className="telemetry-card-val"
-                style={{
-                  color:
-                    mlLiveStatus?.prediction === 1
-                      ? '#f87171'
-                      : mlLiveStatus?.prediction === 0
-                        ? '#34d399'
-                        : 'var(--text-strong)',
-                }}
-              >
-                {mlLiveStatus?.label ??
-                  (mlLiveStatus?.prediction === 1
-                    ? 'Attack'
-                    : mlLiveStatus?.prediction === 0
-                      ? 'Normal'
-                      : 'None')}
-              </strong>
-              <span className="telemetry-card-sub">Random Forest Verdict</span>
-            </article>
-
-            <article className="telemetry-card">
-              <span className="telemetry-card-label">Attack Probability</span>
-              <strong
-                className="telemetry-card-val"
-                style={{
-                  color: mlLiveStatus?.attack_probability > 0.5 ? '#f87171' : 'var(--accent-text)',
-                }}
-              >
-                {formatProbability(mlLiveStatus?.attack_probability)}
-              </strong>
-              <span className="telemetry-card-sub">Anomaly Confidence</span>
-            </article>
-
-            <article className="telemetry-card">
-              <span className="telemetry-card-label">Packets in Window</span>
-              <strong className="telemetry-card-val">
-                {formatValue(mlLiveStatus?.total_packets)}
-              </strong>
-              <span className="telemetry-card-sub">Frames processed</span>
-            </article>
-          </div>
-
-          {/* Live Inference Details Panel */}
-          <div className="panel ml-inference-panel">
-            <div className="panel-header">
-              <div>
-                <h3>Latest 5-Second Window Inference Telemetry</h3>
-                <p className="panel-subtitle">
-                  Features computed across IEEE 802.11 management, control, and data frames.
-                </p>
-              </div>
-              {mlDetectionLoading && <span className="badge badge-default">Analyzing...</span>}
-            </div>
-
-            {mlLiveStatus && mlLiveStatus.status !== 'no_inference' && mlLiveStatus.prediction !== undefined ? (
-              <div className="detection-active-box">
-                {/* Probability Meters */}
-                <div className="prob-meter-row">
-                  <div className="prob-meter-label">
-                    <span>Attack Probability</span>
-                    <strong style={{ color: mlLiveStatus.attack_probability > 0.5 ? '#f87171' : 'var(--text-strong)' }}>
-                      {formatProbability(mlLiveStatus.attack_probability)}
-                    </strong>
-                  </div>
-                  <div className="prob-meter-bar">
-                    <div
-                      className="prob-meter-fill"
-                      style={{
-                        width: `${Math.min(100, Math.max(0, (mlLiveStatus.attack_probability || 0) * 100))}%`,
-                        backgroundColor: mlLiveStatus.attack_probability > 0.5 ? '#ef4444' : '#14b8a6',
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div className="prob-meter-row" style={{ marginTop: '12px' }}>
-                  <div className="prob-meter-label">
-                    <span>Normal Probability</span>
-                    <strong>{formatProbability(mlLiveStatus.normal_probability)}</strong>
-                  </div>
-                  <div className="prob-meter-bar">
-                    <div
-                      className="prob-meter-fill"
-                      style={{
-                        width: `${Math.min(100, Math.max(0, (mlLiveStatus.normal_probability || 0) * 100))}%`,
-                        backgroundColor: '#10b981',
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div className="window-telemetry-grid" style={{ marginTop: '16px' }}>
-                  <div className="window-telemetry-item">
-                    <span className="telemetry-label">Window Start (Timestamp)</span>
-                    <strong className="telemetry-val">{mlLiveStatus.window_start ?? '--'}s</strong>
-                  </div>
-                  <div className="window-telemetry-item">
-                    <span className="telemetry-label">Window End (Timestamp)</span>
-                    <strong className="telemetry-val">{mlLiveStatus.window_end ?? '--'}s</strong>
-                  </div>
-                  <div className="window-telemetry-item">
-                    <span className="telemetry-label">Total Window Frames</span>
-                    <strong className="telemetry-val">{formatValue(mlLiveStatus.total_packets)}</strong>
-                  </div>
-                  <div className="window-telemetry-item">
-                    <span className="telemetry-label">Features Extracted</span>
-                    <strong className="telemetry-val">{mlLiveStatus.feature_count ?? 31} AWID3 Features</strong>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="empty-state">
-                <div className="empty-state-icon">
-                  <IconCpu size={28} />
-                </div>
-                <p className="empty-state-title">Awaiting Live Capture Traffic</p>
-                <p className="empty-state-text">
-                  To view live inference predictions, start packet capture on the Live Monitor page. The model automatically evaluates 5-second tumbling windows.
-                </p>
-                <div className="empty-state-actions">
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    onClick={() => setActiveView('Live Monitor')}
+        <div className="ml-tab-body">
+          {/* STATE D: GENUINE 31-FEATURE INFERENCE CARD (When Live Packet Window Analyzed) */}
+          {hasLiveInference && (
+            <div className="panel genuine-inference-panel">
+              <div className="panel-header">
+                <div className="control-title-group">
+                  <h3 className="section-title">Live 31-Feature Frame Window Verdict</h3>
+                  <span
+                    className={`badge ${
+                      mlLiveStatus.prediction === 0 ? 'badge-status-resolved' : 'badge-severity-high'
+                    }`}
                   >
-                    Go to Live Monitor &rarr;
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => setMlEngineTab('evaluation')}
-                  >
-                    Try Offline Dataset Evaluation
-                  </button>
+                    {mlLiveStatus.prediction === 0 ? 'NORMAL TRAFFIC' : 'ATTACK DETECTED'}
+                  </span>
                 </div>
+                <span className="mono-val" style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                  Window: 5.0s Tumbling Slice
+                </span>
               </div>
-            )}
-          </div>
-        </div>
-      )}
 
-      {/* TAB 2: OFFLINE DATASET EVALUATION */}
-      {mlEngineTab === 'evaluation' && (
-        <div className="ml-tab-content">
-          <div className="panel dataset-eval-panel">
-            <div className="panel-header">
-              <div>
-                <h3>Offline AWID3 Dataset Evaluation Benchmark</h3>
-                <p className="panel-subtitle">
-                  Validate the Random Forest classifier against ground-truth labeled benchmark CSV datasets.
+              <div className="telemetry-strip-grid" style={{ marginTop: '10px' }}>
+                <article className="telemetry-card">
+                  <span className="telemetry-card-label">Predicted Class</span>
+                  <strong
+                    className="telemetry-card-val"
+                    style={{
+                      color:
+                        mlLiveStatus.prediction === 1 ? 'var(--danger-text)' : 'var(--success-text)',
+                    }}
+                  >
+                    {mlLiveStatus.prediction === 0 ? 'NORMAL' : 'ATTACK'}
+                  </strong>
+                  <span className="telemetry-card-sub">
+                    {mlLiveStatus.label || (mlLiveStatus.prediction === 0 ? 'Normal 802.11 Traffic' : 'Suspicious Burst')}
+                  </span>
+                </article>
+
+                <article className="telemetry-card">
+                  <span className="telemetry-card-label">Attack Probability</span>
+                  <strong
+                    className="telemetry-card-val"
+                    style={{
+                      color:
+                        mlLiveStatus.attack_probability > 0.5 ? 'var(--danger-text)' : 'var(--success-text)',
+                    }}
+                  >
+                    {formatProbability(mlLiveStatus.attack_probability)}
+                  </strong>
+                  <span className="telemetry-card-sub">Random Forest Softmax</span>
+                </article>
+
+                <article className="telemetry-card">
+                  <span className="telemetry-card-label">Frames Evaluated</span>
+                  <strong className="telemetry-card-val">
+                    {formatValue(mlLiveStatus.frame_count ?? mlLiveStatus.packet_count ?? '--')}
+                  </strong>
+                  <span className="telemetry-card-sub">Ingested in window</span>
+                </article>
+
+                <article className="telemetry-card">
+                  <span className="telemetry-card-label">Timestamp</span>
+                  <strong className="telemetry-card-val" style={{ fontSize: '13px' }}>
+                    {formatValue(mlLiveStatus.timestamp ?? 'Real-time Stream')}
+                  </strong>
+                  <span className="telemetry-card-sub">Latest batch inference</span>
+                </article>
+              </div>
+
+              {/* Evidence Explanation */}
+              <div className="inference-evidence-box">
+                <p>
+                  <strong>Model Verdict Explanation:</strong>{' '}
+                  {mlLiveStatus.prediction === 1
+                    ? 'The AWID3 Random Forest classifier identified abnormal temporal frame distributions, elevated retry ratios, or excessive deauthentication bursts exceeding typical wireless baseline thresholds.'
+                    : 'The frame sequence and temporal burst metrics extracted from the current 5-second capture window conform to legitimate IEEE 802.11 wireless network operation.'}
                 </p>
               </div>
-            </div>
 
-            <div className="eval-select-row">
-              <label className="eval-label">
-                <span>Select Evaluation Dataset:</span>
-                <select
-                  value={selectedDataset}
-                  onChange={(e) => setSelectedDataset(e.target.value)}
-                  disabled={mlTestingLoading}
-                  className="eval-select"
+              {/* Expandable Extracted Features */}
+              <div className="expandable-features-wrap">
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setShowExtractedFeatures(!showExtractedFeatures)}
                 >
-                  <option value="">-- Choose a test dataset --</option>
-                  {mlDatasets.map((ds) => (
-                    <option key={ds.filename || ds.name} value={ds.filename || ds.name}>
-                      {ds.name || ds.filename} ({ds.sample_count ? `${ds.sample_count} samples` : ds.size_bytes ? `${Math.round(ds.size_bytes / 1024)} KB` : 'Ready'})
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  {showExtractedFeatures ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}
+                  <span>{showExtractedFeatures ? 'Hide Extracted 31 Features' : 'View Extracted 31 Features'}</span>
+                </button>
 
-              <button
-                type="button"
-                className="btn btn-primary"
-                disabled={mlTestingLoading || !selectedDataset}
-                onClick={handleRunMlTest}
-              >
-                <IconPlay size={14} />
-                <span>{mlTestingLoading ? 'Running Evaluation...' : 'Run Benchmark Evaluation'}</span>
-              </button>
-            </div>
-
-            {/* Evaluation Results (if available) */}
-            {mlTestResult ? (
-              <div className="eval-results-container" style={{ marginTop: '20px' }}>
-                <div className="telemetry-strip-grid">
-                  <article className="telemetry-card">
-                    <span className="telemetry-card-label">Model Accuracy</span>
-                    <strong className="telemetry-card-val" style={{ color: '#34d399' }}>
-                      {mlTestResult.accuracy !== undefined ? `${(mlTestResult.accuracy * 100).toFixed(2)}%` : '--'}
-                    </strong>
-                    <span className="telemetry-card-sub">Overall Correct</span>
-                  </article>
-
-                  <article className="telemetry-card">
-                    <span className="telemetry-card-label">Precision</span>
-                    <strong className="telemetry-card-val">
-                      {mlTestResult.precision !== undefined ? `${(mlTestResult.precision * 100).toFixed(2)}%` : '--'}
-                    </strong>
-                    <span className="telemetry-card-sub">Positive Predictive Value</span>
-                  </article>
-
-                  <article className="telemetry-card">
-                    <span className="telemetry-card-label">Recall / Sensitivity</span>
-                    <strong className="telemetry-card-val">
-                      {mlTestResult.recall !== undefined ? `${(mlTestResult.recall * 100).toFixed(2)}%` : '--'}
-                    </strong>
-                    <span className="telemetry-card-sub">True Positive Rate</span>
-                  </article>
-
-                  <article className="telemetry-card">
-                    <span className="telemetry-card-label">F1-Score</span>
-                    <strong className="telemetry-card-val" style={{ color: 'var(--accent-text)' }}>
-                      {mlTestResult.f1_score !== undefined ? `${(mlTestResult.f1_score * 100).toFixed(2)}%` : '--'}
-                    </strong>
-                    <span className="telemetry-card-sub">Harmonic Mean</span>
-                  </article>
-                </div>
-
-                {/* Confusion Matrix */}
-                {mlTestResult.confusion_matrix && (
-                  <div className="panel matrix-panel" style={{ marginTop: '16px' }}>
-                    <h4>Confusion Matrix Breakdown</h4>
-                    <div className="matrix-grid">
-                      <div className="matrix-cell">
-                        <span className="matrix-label">True Negative (Normal correctly identified)</span>
-                        <strong className="matrix-val">{mlTestResult.confusion_matrix.tn ?? mlTestResult.confusion_matrix[0]?.[0] ?? '--'}</strong>
-                      </div>
-                      <div className="matrix-cell">
-                        <span className="matrix-label">False Positive (Normal classified as Attack)</span>
-                        <strong className="matrix-val error-text">{mlTestResult.confusion_matrix.fp ?? mlTestResult.confusion_matrix[0]?.[1] ?? '--'}</strong>
-                      </div>
-                      <div className="matrix-cell">
-                        <span className="matrix-label">False Negative (Attack missed)</span>
-                        <strong className="matrix-val error-text">{mlTestResult.confusion_matrix.fn ?? mlTestResult.confusion_matrix[1]?.[0] ?? '--'}</strong>
-                      </div>
-                      <div className="matrix-cell">
-                        <span className="matrix-label">True Positive (Attack correctly detected)</span>
-                        <strong className="matrix-val success-text">{mlTestResult.confusion_matrix.tp ?? mlTestResult.confusion_matrix[1]?.[1] ?? '--'}</strong>
-                      </div>
+                {showExtractedFeatures && (
+                  <div className="features-preview-box">
+                    <p className="features-box-intro">
+                      Canonical 31 AWID3 input vector features feeding the Random Forest decision tree forest:
+                    </p>
+                    <div className="feature-schema-grid">
+                      {features.map((feat, idx) => {
+                        const featValue = mlLiveStatus.features?.[feat] ?? mlLiveStatus.feature_values?.[idx]
+                        return (
+                          <div className="schema-chip" key={feat}>
+                            <span className="chip-idx">#{idx + 1}</span>
+                            <span className="chip-name">{feat}:</span>
+                            <strong className="chip-val">
+                              {featValue !== undefined ? formatValue(featValue) : 'Extracted'}
+                            </strong>
+                          </div>
+                        )
+                      })}
                     </div>
                   </div>
                 )}
               </div>
-            ) : (
-              <div className="empty-state" style={{ marginTop: '20px' }}>
-                <p className="empty-state-title">Select a Dataset and Click Run</p>
-                <p className="empty-state-text">
-                  The system will run batch classification on the selected test dataset and generate accuracy, precision, recall, and confusion matrix reports.
-                </p>
-              </div>
-            )}
-          </div>
+            </div>
+          )}
 
-          {/* Historical Runs */}
-          {mlTestRuns && mlTestRuns.length > 0 && (
-            <div className="panel history-panel" style={{ marginTop: '16px' }}>
-              <div className="panel-header">
+          {/* =========================================================================
+             STATE A: NO WI-FI SCAN RESULTS (Compact Informational Cards)
+             ========================================================================= */}
+          {networks.length === 0 ? (
+            <div className="panel state-a-panel">
+              <div className="state-a-intro">
+                <div className="state-a-icon-circle">
+                  <IconWifi size={24} />
+                </div>
                 <div>
-                  <h3>Evaluation Run History</h3>
-                  <p className="panel-subtitle">Past offline benchmark evaluations saved in database.</p>
+                  <h3 className="section-title">No Wi-Fi Scan Data Available Yet</h3>
+                  <p className="panel-subtitle">
+                    Scan nearby wireless networks to populate access points and evaluate network parameters.
+                  </p>
                 </div>
               </div>
 
-              <div className="table-wrap">
+              {/* 4 Compact Informational Cards as specified in Prompt */}
+              <div className="telemetry-strip-grid" style={{ marginTop: '14px' }}>
+                <article className="telemetry-card">
+                  <span className="telemetry-card-label">Subsystem Purpose</span>
+                  <strong className="telemetry-card-val" style={{ fontSize: '15px' }}>
+                    Detect Attacks
+                  </strong>
+                  <span className="telemetry-card-sub">Identifies anomalies from 802.11 packet bursts</span>
+                </article>
+
+                <article className="telemetry-card">
+                  <span className="telemetry-card-label">Frozen Classifier</span>
+                  <strong className="telemetry-card-val" style={{ fontSize: '15px' }}>
+                    AWID3 Random Forest
+                  </strong>
+                  <span className="telemetry-card-sub">Canonical binary threat detector</span>
+                </article>
+
+                <article className="telemetry-card">
+                  <span className="telemetry-card-label">Feature Schema</span>
+                  <strong className="telemetry-card-val" style={{ fontSize: '15px' }}>
+                    31 Canonical Features
+                  </strong>
+                  <span className="telemetry-card-sub">Frame timing, retries &amp; burst ratios</span>
+                </article>
+
+                <article className="telemetry-card">
+                  <span className="telemetry-card-label">Subsystem Status</span>
+                  <strong className="telemetry-card-val" style={{ fontSize: '15px', color: 'var(--text-muted)' }}>
+                    Waiting for Data
+                  </strong>
+                  <span className="telemetry-card-sub">Run Wi-Fi scan or packet capture</span>
+                </article>
+              </div>
+
+              <div className="state-a-cta">
+                <button
+                  className="btn btn-primary"
+                  onClick={() => setActiveView('WiFi Scan')}
+                  type="button"
+                >
+                  <IconWifi size={14} />
+                  <span>Go to Wi-Fi Scan</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* =========================================================================
+               STATE B & C: NETWORKS DISCOVERED & STATUS EXPLANATION
+               ========================================================================= */
+            <div className="panel state-b-panel">
+              <div className="panel-header">
+                <div>
+                  <h3 className="section-title">
+                    Discovered Wireless Access Points ({filteredNetworks.length})
+                  </h3>
+                  <p className="panel-subtitle">
+                    Real-time access points detected by the spectrum scanner. Select an access point to view analysis requirements.
+                  </p>
+                </div>
+
+                <div className="search-box" style={{ maxWidth: '280px' }}>
+                  <input
+                    type="text"
+                    className="search-input"
+                    placeholder="Filter by SSID or BSSID..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Network Table */}
+              <div className="table-wrap" style={{ marginTop: '10px' }}>
                 <table>
                   <thead>
                     <tr>
-                      <th>Run ID</th>
-                      <th>Timestamp</th>
-                      <th>Dataset</th>
-                      <th>Samples</th>
-                      <th>Accuracy</th>
-                      <th>F1-Score</th>
+                      <th>SSID &amp; Access Point</th>
+                      <th>BSSID (MAC)</th>
+                      <th>Signal</th>
+                      <th>Channel</th>
+                      <th>AWID3 Analysis Status</th>
+                      <th style={{ textAlign: 'right' }}>Action</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {mlTestRuns.map((run) => (
-                      <tr key={run.id}>
-                        <td className="mono-val">#{run.id}</td>
-                        <td>{formatDateTime(run.created_at)}</td>
-                        <td>{run.dataset_name || run.dataset_path || 'Test Set'}</td>
-                        <td className="mono-val">{formatValue(run.total_samples)}</td>
-                        <td className="mono-val success-text">
-                          {run.accuracy !== undefined ? `${(run.accuracy * 100).toFixed(1)}%` : '--'}
-                        </td>
-                        <td className="mono-val">
-                          {run.f1_score !== undefined ? `${(run.f1_score * 100).toFixed(1)}%` : '--'}
-                        </td>
-                      </tr>
-                    ))}
+                    {filteredNetworks.map((net, idx) => {
+                      const ssid = getValue(net, ['ssid', 'SSID']) || '<Hidden SSID>'
+                      const bssid = getValue(net, ['bssid', 'BSSID']) || 'Unknown'
+                      const sig = getValue(net, ['signal', 'Signal']) || '--'
+                      const ch = getValue(net, ['channel', 'Channel']) || '--'
+                      const isSelected = selectedNetworkDetails?.bssid === bssid
+
+                      return (
+                        <tr
+                          key={bssid || idx}
+                          style={{
+                            background: isSelected ? 'var(--accent-light)' : 'transparent',
+                          }}
+                        >
+                          <td>
+                            <strong>{ssid}</strong>
+                          </td>
+                          <td>
+                            <span className="mono-val" style={{ fontSize: '12px' }}>
+                              {bssid}
+                            </span>
+                          </td>
+                          <td>
+                            <span className="mono-val">{sig}</span>
+                          </td>
+                          <td>
+                            <span className="mono-val">Ch {ch}</span>
+                          </td>
+                          {/* STATE C: Truthful Status without synthetic vectors */}
+                          <td>
+                            <span className="badge badge-default">
+                              Network discovered — waiting for packet data
+                            </span>
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              onClick={() =>
+                                setSelectedNetworkDetails(isSelected ? null : { ssid, bssid, sig, ch, ...net })
+                              }
+                            >
+                              <IconInfo size={13} />
+                              <span>{isSelected ? 'Close' : 'Inspect'}</span>
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
+
+              {/* STATE C: Selected Network Inspection Card */}
+              {selectedNetworkDetails && (
+                <div className="selected-network-card">
+                  <div className="selected-card-header">
+                    <h4 className="selected-card-title">
+                      Network Details &amp; Model Requirements: {selectedNetworkDetails.ssid}
+                    </h4>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => setSelectedNetworkDetails(null)}
+                    >
+                      &times;
+                    </button>
+                  </div>
+
+                  <div className="selected-card-body">
+                    <div className="selected-meta-strip">
+                      <span><strong>BSSID:</strong> {selectedNetworkDetails.bssid}</span>
+                      <span><strong>Channel:</strong> {selectedNetworkDetails.ch}</span>
+                      <span><strong>Signal:</strong> {selectedNetworkDetails.sig}</span>
+                      <span><strong>Security:</strong> {getValue(selectedNetworkDetails, ['encryption', 'security']) || 'WPA2'}</span>
+                    </div>
+
+                    <div className="state-c-explanation-box">
+                      <p>
+                        <strong>Why is intrusion analysis waiting for packet data?</strong>
+                        <br />
+                        The AWID3 intrusion detection model operates on 31 canonical frame-header and temporal burst metrics (such as deauth frame ratios, retry distributions, and sequence delta gaps). Ordinary beacon scan results only provide physical RF properties. To ensure mathematical accuracy and adhere to the project's safeguards, <strong>synthetic features are never fabricated</strong>.
+                      </p>
+                      <div className="state-c-action-buttons">
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm"
+                          onClick={() => setActiveView('Live Monitor')}
+                        >
+                          <IconActivity size={13} />
+                          <span>Start Live Packet Capture</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => setActiveView('PCAP Analysis')}
+                        >
+                          <IconFileSearch size={13} />
+                          <span>Analyze Pre-recorded PCAP</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
       )}
 
-      {/* TAB 3: MODEL & 31-FEATURE SCHEMA SPECIFICATION */}
-      {mlEngineTab === 'schema' && (
-        <div className="ml-tab-content">
-          <div className="panel schema-overview-panel">
+      {/* =========================================================================
+         TAB 2: OFFLINE DATASET EVALUATION
+         ========================================================================= */}
+      {mlEngineTab === 'evaluation' && (
+        <div className="ml-tab-body">
+          <div className="panel">
             <div className="panel-header">
               <div>
-                <h3>AWID3 Intrusion Detection Model Specification</h3>
+                <h3 className="section-title">Offline Benchmark Dataset Evaluation</h3>
                 <p className="panel-subtitle">
-                  Technical specifications of the Random Forest model and canonical feature schema.
+                  Benchmark the frozen 31-feature Random Forest model against verified AWID3 evaluation CSV datasets.
                 </p>
               </div>
-            </div>
 
-            <div className="spec-grid">
-              <div className="spec-card">
-                <span className="spec-label">Model File</span>
-                <strong className="spec-val mono-val">{mlSchemaInfo?.model_name || 'random_forest_awid3_v3_expanded.joblib'}</strong>
-              </div>
-              <div className="spec-card">
-                <span className="spec-label">Classification Mode</span>
-                <strong className="spec-val">Binary (0: Normal Traffic, 1: Attack)</strong>
-              </div>
-              <div className="spec-card">
-                <span className="spec-label">Canonical Feature Count</span>
-                <strong className="spec-val" style={{ color: 'var(--accent-text)' }}>
-                  {mlSchemaInfo?.feature_count ?? 31} Features
-                </strong>
-              </div>
-              <div className="spec-card">
-                <span className="spec-label">Algorithm Architecture</span>
-                <strong className="spec-val">Random Forest Ensemble (Decision Trees)</strong>
-              </div>
-              <div className="spec-card">
-                <span className="spec-label">Feature Order Enforcement</span>
-                <strong className="spec-val success-text">Strict Schema Index Validation</strong>
-              </div>
-              <div className="spec-card">
-                <span className="spec-label">Target Field</span>
-                <strong className="spec-val mono-val">{mlSchemaInfo?.target_column || 'Label'}</strong>
+              <div className="control-bar-actions">
+                <select
+                  className="dataset-select"
+                  value={selectedDataset}
+                  onChange={(e) => setSelectedDataset(e.target.value)}
+                  disabled={mlTestingLoading}
+                >
+                  <option value="">-- Choose Evaluation Dataset --</option>
+                  {mlDatasets.map((ds) => (
+                    <option key={ds.filename || ds.name} value={ds.filename || ds.name}>
+                      {ds.filename || ds.name} ({ds.sample_count || ds.rows || '?'} samples)
+                    </option>
+                  ))}
+                </select>
+
+                <button
+                  className="btn btn-primary"
+                  disabled={mlTestingLoading || !selectedDataset}
+                  onClick={handleRunMlTest}
+                  type="button"
+                >
+                  <IconPlay size={14} />
+                  <span>{mlTestingLoading ? 'Evaluating...' : 'Run Benchmark Test'}</span>
+                </button>
               </div>
             </div>
 
-            {/* Collapsible 31 Canonical Features Details Section */}
-            <div className="collapsible-section" style={{ marginTop: '20px' }}>
-              <div
-                className="collapsible-header"
-                onClick={() => setShowAdvancedSchema(!showAdvancedSchema)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    setShowAdvancedSchema(!showAdvancedSchema)
-                  }
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span className="collapsible-toggle-icon">{showAdvancedSchema ? '▼' : '►'}</span>
-                  <h4>Inspect 31 Canonical AWID3 Feature Definitions</h4>
+            {mlTestResult && (
+              <div className="test-results-wrap" style={{ marginTop: '16px' }}>
+                <div className="telemetry-strip-grid">
+                  <article className="telemetry-card">
+                    <span className="telemetry-card-label">Accuracy</span>
+                    <strong className="telemetry-card-val" style={{ color: 'var(--success-text)' }}>
+                      {(mlTestResult.accuracy * 100).toFixed(2)}%
+                    </strong>
+                    <span className="telemetry-card-sub">Correct classifications</span>
+                  </article>
+
+                  <article className="telemetry-card">
+                    <span className="telemetry-card-label">Precision</span>
+                    <strong className="telemetry-card-val">
+                      {(mlTestResult.precision * 100).toFixed(2)}%
+                    </strong>
+                    <span className="telemetry-card-sub">Attack precision</span>
+                  </article>
+
+                  <article className="telemetry-card">
+                    <span className="telemetry-card-label">Recall</span>
+                    <strong className="telemetry-card-val">
+                      {(mlTestResult.recall * 100).toFixed(2)}%
+                    </strong>
+                    <span className="telemetry-card-sub">Attack sensitivity</span>
+                  </article>
+
+                  <article className="telemetry-card">
+                    <span className="telemetry-card-label">F1 Score</span>
+                    <strong className="telemetry-card-val">
+                      {(mlTestResult.f1_score * 100).toFixed(2)}%
+                    </strong>
+                    <span className="telemetry-card-sub">Harmonic mean</span>
+                  </article>
                 </div>
-                <span className="badge badge-default">
-                  {showAdvancedSchema ? 'Collapse Schema' : 'Expand Schema'}
-                </span>
-              </div>
 
-              {showAdvancedSchema && (
-                <div className="collapsible-body" style={{ marginTop: '12px' }}>
-                  <p className="schema-intro-text">
-                    The AWID3 intrusion detection pipeline transforms raw 802.11 frames into 31 time-window statistics capturing packet burst dynamics, inter-arrival times, sequence fluctuations, and frame subtype counts:
-                  </p>
-
-                  <div className="feature-tags-grid">
-                    {features.length > 0 ? (
-                      features.map((feat, idx) => (
-                        <div className="feature-item-card" key={feat}>
-                          <span className="feature-idx mono-val">#{idx + 1}</span>
-                          <span className="feature-name mono-val">{feat}</span>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="empty-state-muted">
-                        Loading feature definitions from /api/ml/test/schema...
+                {mlTestResult.confusion_matrix && (
+                  <div className="confusion-matrix-box" style={{ marginTop: '16px' }}>
+                    <h4 className="section-title" style={{ fontSize: '14px', marginBottom: '8px' }}>
+                      Confusion Matrix
+                    </h4>
+                    <div className="confusion-matrix-grid">
+                      <div className="cm-cell positive">
+                        <span className="cm-cell-label">True Normal (TN)</span>
+                        <strong className="cm-cell-val">
+                          {formatValue(mlTestResult.confusion_matrix.true_negative ?? mlTestResult.confusion_matrix.tn)}
+                        </strong>
                       </div>
-                    )}
+                      <div className="cm-cell negative">
+                        <span className="cm-cell-label">False Attack (FP)</span>
+                        <strong className="cm-cell-val">
+                          {formatValue(mlTestResult.confusion_matrix.false_positive ?? mlTestResult.confusion_matrix.fp)}
+                        </strong>
+                      </div>
+                      <div className="cm-cell negative">
+                        <span className="cm-cell-label">Missed Attack (FN)</span>
+                        <strong className="cm-cell-val">
+                          {formatValue(mlTestResult.confusion_matrix.false_negative ?? mlTestResult.confusion_matrix.fn)}
+                        </strong>
+                      </div>
+                      <div className="cm-cell positive">
+                        <span className="cm-cell-label">True Attack (TP)</span>
+                        <strong className="cm-cell-val">
+                          {formatValue(mlTestResult.confusion_matrix.true_positive ?? mlTestResult.confusion_matrix.tp)}
+                        </strong>
+                      </div>
+                    </div>
                   </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+         TAB 3: 31 CANONICAL FEATURE SCHEMA
+         ========================================================================= */}
+      {mlEngineTab === 'schema' && (
+        <div className="ml-tab-body">
+          <div className="panel">
+            <div className="panel-header">
+              <div>
+                <h3 className="section-title">Canonical 31-Feature AWID3 Vector Schema</h3>
+                <p className="panel-subtitle">
+                  Fixed input vector order expected by <code>random_forest_awid3_v3_expanded.joblib</code>.
+                </p>
+              </div>
+              <span className="badge badge-default">31 Features Frozen</span>
+            </div>
+
+            <div className="feature-schema-grid" style={{ marginTop: '12px' }}>
+              {features.map((feat, idx) => (
+                <div className="schema-chip" key={feat}>
+                  <span className="chip-idx">#{idx + 1}</span>
+                  <span className="chip-name">{feat}</span>
                 </div>
-              )}
+              ))}
             </div>
           </div>
         </div>
       )}
-    </section>
+    </div>
   )
 }

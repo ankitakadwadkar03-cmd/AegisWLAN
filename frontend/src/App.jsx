@@ -4,8 +4,6 @@ import './App.css'
 import {
   getValue,
   normalizeList,
-  formatValue,
-  formatProbability,
   normalizeScannerStatus,
   normalizeCaptureStatus,
   getInterfaceName,
@@ -20,8 +18,8 @@ import { Header } from './components/Header'
 import { IncidentDrawer } from './components/IncidentDrawer'
 import { ConnectModal } from './components/ConnectModal'
 import { AdvisorDrawer } from './components/AdvisorDrawer'
+import { NetworkWhyDrawer } from './components/NetworkWhyDrawer'
 
-import { DashboardView } from './views/DashboardView'
 import { WifiScanView } from './views/WifiScanView'
 import { LiveMonitorView } from './views/LiveMonitorView'
 import { MlEngineView } from './views/MlEngineView'
@@ -32,7 +30,6 @@ import { ReportsView } from './views/ReportsView'
 import { SettingsView } from './views/SettingsView'
 
 const sidebarItems = [
-  'Dashboard',
   'WiFi Scan',
   'Live Monitor',
   'ML Engine',
@@ -57,7 +54,7 @@ function App() {
       pollInterval: 2000,
       visualAlerts: true,
       soundAlerts: false,
-      defaultView: 'Dashboard',
+      defaultView: 'WiFi Scan',
       tableDensity: 'compact',
     }
   })
@@ -72,7 +69,7 @@ function App() {
         }
       }
     } catch {}
-    return 'Dashboard'
+    return 'WiFi Scan'
   })
 
   const [interfaces, setInterfaces] = useState([])
@@ -146,6 +143,7 @@ function App() {
   const [showPassword, setShowPassword] = useState(false)
   const [connectLoading, setConnectLoading] = useState(false)
   const [connectStatus, setConnectStatus] = useState(null)
+  const [whyDrawerNetwork, setWhyDrawerNetwork] = useState(null)
 
   // Recommendation expandable sections
   const [showRankingExplanation, setShowRankingExplanation] = useState(false)
@@ -219,36 +217,6 @@ function App() {
     setPackets(normalizeList(packetsPayload, 'packets'))
   }
 
-  // Dashboard Loader
-  useEffect(() => {
-    if (activeView !== 'Dashboard') return
-
-    const controller = new AbortController()
-    const loadDashboardData = async () => {
-      try {
-        await Promise.all([
-          loadInterfaces(controller.signal),
-          loadNetworks(controller.signal),
-          loadCaptureStatus(controller.signal),
-          loadPackets(controller.signal),
-          fetchJson('/incidents', { signal: controller.signal })
-            .then((data) => setIncidents(normalizeList(data, 'incidents')))
-            .catch(() => {}),
-          fetchJson('/ml/live-status', { signal: controller.signal })
-            .then((data) => setMlLiveStatus(data))
-            .catch(() => {}),
-          fetchJson('/pcap/analyses', { signal: controller.signal })
-            .then((data) => setPcapHistory(normalizeList(data, 'analyses')))
-            .catch(() => {}),
-        ])
-      } catch (error) {
-        if (error.name === 'AbortError') return
-      }
-    }
-
-    loadDashboardData()
-    return () => controller.abort()
-  }, [activeView])
 
   // Wi-Fi Scan Initial Loader
   useEffect(() => {
@@ -412,7 +380,7 @@ function App() {
 
   // ML Engine Initial Loader
   useEffect(() => {
-    if (activeView !== 'ML Engine' && activeView !== 'Dashboard') return
+    if (activeView !== 'ML Engine') return
 
     const controller = new AbortController()
     const loadMlDetectionData = async () => {
@@ -447,7 +415,7 @@ function App() {
 
   // ML Detection Polling
   useEffect(() => {
-    if (activeView !== 'ML Engine' && activeView !== 'Dashboard') return
+    if (activeView !== 'ML Engine') return
 
     let activePollController = null
     const pollMlDetection = () => {
@@ -498,7 +466,7 @@ function App() {
   }
 
   useEffect(() => {
-    if (activeView !== 'Incidents' && activeView !== 'Dashboard') return
+    if (activeView !== 'Incidents') return
     const controller = new AbortController()
     loadIncidentsData(controller.signal)
     return () => controller.abort()
@@ -506,7 +474,7 @@ function App() {
 
   // Incidents Polling
   useEffect(() => {
-    if (activeView !== 'Incidents' && activeView !== 'Dashboard') return
+    if (activeView !== 'Incidents') return
 
     let activePollController = null
     const pollIncidents = () => {
@@ -919,51 +887,6 @@ function App() {
     getValue(captureProgress, ['interface']) ??
     (selectedCaptureInterface || 'Not Selected')
 
-  const dashboardKpis = [
-    {
-      label: 'Security Alerts',
-      value: formatValue(totalIncidents),
-      sub: totalIncidents === 0
-        ? 'All clear (0 alerts)'
-        : `${newIncidents} Unresolved · ${highSeverityIncidents} High Severity`,
-      border: highSeverityIncidents > 0 ? '#ef4444' : totalIncidents > 0 ? '#f59e0b' : '#10b981',
-      valColor: highSeverityIncidents > 0 ? '#f87171' : 'var(--text-strong)',
-    },
-    {
-      label: 'Latest ML Verdict',
-      value: mlLiveStatus && mlLiveStatus.status !== 'no_inference' && mlLiveStatus.prediction !== undefined
-        ? (mlLiveStatus.prediction === 1 ? 'Attack Detected' : 'Normal Traffic')
-        : 'Awaiting Ingest',
-      sub: mlLiveStatus && mlLiveStatus.status !== 'no_inference' && mlLiveStatus.attack_probability !== undefined
-        ? `${formatProbability(mlLiveStatus.attack_probability)} attack probability`
-        : 'No active inference stream',
-      border: mlLiveStatus && mlLiveStatus.status !== 'no_inference' && mlLiveStatus.prediction !== undefined
-        ? (mlLiveStatus.prediction === 1 ? '#ef4444' : '#10b981')
-        : 'var(--border)',
-      valColor: mlLiveStatus && mlLiveStatus.status !== 'no_inference' && mlLiveStatus.prediction !== undefined
-        ? (mlLiveStatus.prediction === 1 ? '#f87171' : '#34d399')
-        : 'var(--text-muted)',
-    },
-    {
-      label: 'Capture Status',
-      value: isCaptureRunning ? 'Active Capture' : 'Standby / Idle',
-      sub: isCaptureRunning
-        ? `${monitoringInterface} · ${getValue(captureProgress, ['packet_rate']) ?? 0} pkt/s`
-        : `${monitoringInterface || 'No adapter selected'} · 0 pkt/s`,
-      border: isCaptureRunning ? '#14b8a6' : 'var(--border)',
-      valColor: isCaptureRunning ? '#2dd4bf' : 'var(--text-strong)',
-    },
-    {
-      label: 'Networks Found',
-      value: formatValue(networks.length),
-      sub: networks.length > 0
-        ? `${networks.filter((n) => String(getValue(n, ['encryption', 'security']) || '').toUpperCase().includes('WPA')).length} Secured · ${networks.filter((n) => !String(getValue(n, ['encryption', 'security']) || '').toUpperCase().includes('WPA')).length} Open`
-        : 'Run Wi-Fi scan to discover',
-      border: '#0284c7',
-      valColor: '#38bdf8',
-    },
-  ]
-
   const filteredScanNetworks = networks.filter((network) => {
     const ssid = String(getValue(network, ['ssid', 'SSID']) || '').toLowerCase()
     const bssid = String(getValue(network, ['bssid', 'BSSID']) || '').toLowerCase()
@@ -1272,20 +1195,6 @@ function App() {
         />
 
         <main className="main-content">
-          {activeView === 'Dashboard' && (
-            <DashboardView
-              isCaptureRunning={isCaptureRunning}
-              monitoringInterface={monitoringInterface}
-              dashboardKpis={dashboardKpis}
-              setActiveView={setActiveView}
-              setMlEngineTab={setMlEngineTab}
-              mlLiveStatus={mlLiveStatus}
-              incidents={incidents}
-              newIncidents={newIncidents}
-              setSelectedIncident={setSelectedIncident}
-            />
-          )}
-
           {activeView === 'WiFi Scan' && (
             <WifiScanView
               wifiScanError={wifiScanError}
@@ -1311,6 +1220,7 @@ function App() {
               setScanSearch={setScanSearch}
               scanFilter={scanFilter}
               setScanFilter={setScanFilter}
+              handleOpenConnectModal={handleOpenConnectModal}
               setActiveView={setActiveView}
             />
           )}
@@ -1358,6 +1268,7 @@ function App() {
               mlTestRuns={mlTestRuns}
               mlSchemaInfo={mlSchemaInfo}
               setActiveView={setActiveView}
+              networks={networks}
             />
           )}
 
@@ -1396,6 +1307,7 @@ function App() {
               recList={recList}
               totalScannedRecs={totalScannedRecs}
               handleOpenConnectModal={handleOpenConnectModal}
+              handleOpenWhyDrawer={(net) => setWhyDrawerNetwork(net)}
               advisorOpen={advisorOpen}
               setAdvisorOpen={setAdvisorOpen}
               showRankingExplanation={showRankingExplanation}
@@ -1489,6 +1401,15 @@ function App() {
           setConnectPassword={setConnectPassword}
           showPassword={showPassword}
           setShowPassword={setShowPassword}
+        />
+
+        <NetworkWhyDrawer
+          network={whyDrawerNetwork}
+          onClose={() => setWhyDrawerNetwork(null)}
+          onConnect={(net) => {
+            setWhyDrawerNetwork(null)
+            handleOpenConnectModal(net)
+          }}
         />
 
         <AdvisorDrawer

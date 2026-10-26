@@ -172,8 +172,8 @@ export const PcapAnalysisView = ({
               style={{
                 borderTop:
                   (pcapResult.attack_windows ?? pcapResult.summary?.attack_windows) > 0
-                    ? '3px solid #ef4444'
-                    : '3px solid #10b981',
+                    ? '3px solid var(--danger)'
+                    : '3px solid var(--success)',
               }}
             >
               <span className="telemetry-card-label">Attack Windows</span>
@@ -182,8 +182,8 @@ export const PcapAnalysisView = ({
                 style={{
                   color:
                     (pcapResult.attack_windows ?? pcapResult.summary?.attack_windows) > 0
-                      ? '#f87171'
-                      : '#34d399',
+                      ? 'var(--danger-text)'
+                      : 'var(--success-text)',
                 }}
               >
                 {formatValue(pcapResult.attack_windows ?? pcapResult.summary?.attack_windows ?? 0)}
@@ -301,7 +301,7 @@ export const PcapAnalysisView = ({
                             <td>
                               <span
                                 className="mono-val"
-                                style={{ color: isAtk ? '#f87171' : 'var(--text-strong)' }}
+                                style={{ color: isAtk ? 'var(--danger-text)' : 'var(--text-strong)' }}
                               >
                                 {formatProbability(win.attack_probability)}
                               </span>

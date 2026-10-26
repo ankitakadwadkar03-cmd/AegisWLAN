@@ -325,7 +325,7 @@ export const SettingsView = ({
               </div>
               <div className="spec-card">
                 <span className="spec-label">Feature Vector Count</span>
-                <strong className="spec-val" style={{ color: '#2dd4bf' }}>12 Features</strong>
+                <strong className="spec-val" style={{ color: 'var(--accent-rose-text)' }}>12 Features</strong>
               </div>
               <div className="spec-card">
                 <span className="spec-label">Target Quality Classes</span>
@@ -366,7 +366,7 @@ export const SettingsView = ({
             {diagnosticsResult && (
               <div className="diagnostics-result-box" style={{ marginTop: '16px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ color: diagnosticsResult.ok ? '#34d399' : '#ef4444', fontWeight: 700 }}>
+                  <span style={{ color: diagnosticsResult.ok ? 'var(--success-text)' : 'var(--danger-text)', fontWeight: 700 }}>
                     {diagnosticsResult.ok ? '✓ BACKEND SERVICE HEALTHY' : '✕ HEALTH CHECK FAILED'}
                   </span>
                   <span style={{ color: 'var(--text-muted)' }}>Latency: {diagnosticsResult.latencyMs} ms</span>
@@ -382,7 +382,7 @@ export const SettingsView = ({
                     </pre>
                   </div>
                 ) : (
-                  <div style={{ color: '#f87171', marginTop: '8px' }}>
+                  <div style={{ color: 'var(--danger-text)', marginTop: '8px' }}>
                     <strong>Error:</strong> {diagnosticsResult.error}
                   </div>
                 )}

@@ -81,13 +81,13 @@ export const IncidentsView = ({
           <article
             className="telemetry-card"
             style={{
-              borderTop: newIncidents > 0 ? '3px solid #f59e0b' : '3px solid #10b981',
+              borderTop: newIncidents > 0 ? '3px solid var(--warning)' : '3px solid var(--success)',
             }}
           >
             <span className="telemetry-card-label">Unresolved Alerts</span>
             <strong
               className="telemetry-card-val"
-              style={{ color: newIncidents > 0 ? '#fbbf24' : '#34d399' }}
+              style={{ color: newIncidents > 0 ? 'var(--warning-text)' : 'var(--success-text)' }}
             >
               {formatValue(newIncidents)}
             </strong>
@@ -99,13 +99,13 @@ export const IncidentsView = ({
           <article
             className="telemetry-card"
             style={{
-              borderTop: highSeverityIncidents > 0 ? '3px solid #ef4444' : '3px solid #10b981',
+              borderTop: highSeverityIncidents > 0 ? '3px solid var(--danger)' : '3px solid var(--success)',
             }}
           >
             <span className="telemetry-card-label">High Severity</span>
             <strong
               className="telemetry-card-val"
-              style={{ color: highSeverityIncidents > 0 ? '#f87171' : '#34d399' }}
+              style={{ color: highSeverityIncidents > 0 ? 'var(--danger-text)' : 'var(--success-text)' }}
             >
               {formatValue(highSeverityIncidents)}
             </strong>
@@ -236,9 +236,9 @@ export const IncidentsView = ({
                         style={{
                           color:
                             incident.attack_probability > 0.7
-                              ? '#f87171'
+                              ? 'var(--danger-text)'
                               : incident.attack_probability > 0.4
-                                ? '#fbbf24'
+                                ? 'var(--warning-text)'
                                 : 'var(--text-strong)',
                         }}
                       >

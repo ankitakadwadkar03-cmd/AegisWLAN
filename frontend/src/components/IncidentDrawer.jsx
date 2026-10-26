@@ -99,7 +99,7 @@ export const IncidentDrawer = ({
                   style={{
                     width: `${Math.min(100, Math.max(0, (attackProb || 0) * 100))}%`,
                     backgroundColor:
-                      attackProb > 0.7 ? '#ef4444' : attackProb > 0.4 ? '#f59e0b' : '#14b8a6',
+                      attackProb > 0.7 ? 'var(--danger)' : attackProb > 0.4 ? 'var(--warning)' : 'var(--success)',
                   }}
                 />
               </div>
