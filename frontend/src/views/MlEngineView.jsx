@@ -505,16 +505,26 @@ export const MlEngineView = ({
                   disabled={mlTestingLoading}
                 >
                   <option value="">-- Choose Evaluation Dataset --</option>
-                  {mlDatasets.map((ds) => (
-                    <option key={ds.filename || ds.name} value={ds.filename || ds.name}>
-                      {ds.filename || ds.name} ({ds.sample_count || ds.rows || '?'} samples)
-                    </option>
-                  ))}
+                  {mlDatasets.map((ds) => {
+                    const dsName = ds.filename || ds.name
+                    const isValid = ds.is_valid !== false && ds.is_valid_schema !== false
+                    return (
+                      <option key={dsName} value={dsName} disabled={!isValid}>
+                        {dsName} ({ds.sample_count || ds.rows || '?'} samples)
+                        {!isValid ? ` [Invalid: ${ds.schema_status || 'Incompatible'}]` : ''}
+                      </option>
+                    )
+                  })}
                 </select>
 
                 <button
                   className="btn btn-primary"
-                  disabled={mlTestingLoading || !selectedDataset}
+                  disabled={
+                    mlTestingLoading ||
+                    !selectedDataset ||
+                    mlDatasets.find((d) => (d.filename || d.name) === selectedDataset)?.is_valid === false ||
+                    mlDatasets.find((d) => (d.filename || d.name) === selectedDataset)?.is_valid_schema === false
+                  }
                   onClick={handleRunMlTest}
                   type="button"
                 >
@@ -530,7 +540,11 @@ export const MlEngineView = ({
                   <article className="telemetry-card">
                     <span className="telemetry-card-label">Accuracy</span>
                     <strong className="telemetry-card-val" style={{ color: 'var(--success-text)' }}>
-                      {(mlTestResult.accuracy * 100).toFixed(2)}%
+                      {mlTestResult.metrics?.accuracy !== undefined
+                        ? `${Number(mlTestResult.metrics.accuracy).toFixed(2)}%`
+                        : mlTestResult.accuracy !== undefined
+                        ? `${Number(mlTestResult.accuracy <= 1 ? mlTestResult.accuracy * 100 : mlTestResult.accuracy).toFixed(2)}%`
+                        : '--'}
                     </strong>
                     <span className="telemetry-card-sub">Correct classifications</span>
                   </article>
@@ -538,7 +552,11 @@ export const MlEngineView = ({
                   <article className="telemetry-card">
                     <span className="telemetry-card-label">Precision</span>
                     <strong className="telemetry-card-val">
-                      {(mlTestResult.precision * 100).toFixed(2)}%
+                      {mlTestResult.metrics?.precision !== undefined
+                        ? `${Number(mlTestResult.metrics.precision).toFixed(2)}%`
+                        : mlTestResult.precision !== undefined
+                        ? `${Number(mlTestResult.precision <= 1 ? mlTestResult.precision * 100 : mlTestResult.precision).toFixed(2)}%`
+                        : '--'}
                     </strong>
                     <span className="telemetry-card-sub">Attack precision</span>
                   </article>
@@ -546,7 +564,11 @@ export const MlEngineView = ({
                   <article className="telemetry-card">
                     <span className="telemetry-card-label">Recall</span>
                     <strong className="telemetry-card-val">
-                      {(mlTestResult.recall * 100).toFixed(2)}%
+                      {mlTestResult.metrics?.recall !== undefined
+                        ? `${Number(mlTestResult.metrics.recall).toFixed(2)}%`
+                        : mlTestResult.recall !== undefined
+                        ? `${Number(mlTestResult.recall <= 1 ? mlTestResult.recall * 100 : mlTestResult.recall).toFixed(2)}%`
+                        : '--'}
                     </strong>
                     <span className="telemetry-card-sub">Attack sensitivity</span>
                   </article>
@@ -554,7 +576,11 @@ export const MlEngineView = ({
                   <article className="telemetry-card">
                     <span className="telemetry-card-label">F1 Score</span>
                     <strong className="telemetry-card-val">
-                      {(mlTestResult.f1_score * 100).toFixed(2)}%
+                      {mlTestResult.metrics?.f1_score !== undefined
+                        ? `${Number(mlTestResult.metrics.f1_score).toFixed(2)}%`
+                        : mlTestResult.f1_score !== undefined
+                        ? `${Number(mlTestResult.f1_score <= 1 ? mlTestResult.f1_score * 100 : mlTestResult.f1_score).toFixed(2)}%`
+                        : '--'}
                     </strong>
                     <span className="telemetry-card-sub">Harmonic mean</span>
                   </article>
@@ -569,25 +595,41 @@ export const MlEngineView = ({
                       <div className="cm-cell positive">
                         <span className="cm-cell-label">True Normal (TN)</span>
                         <strong className="cm-cell-val">
-                          {formatValue(mlTestResult.confusion_matrix.true_negative ?? mlTestResult.confusion_matrix.tn)}
+                          {formatValue(
+                            mlTestResult.confusion_matrix.true_negatives ??
+                            mlTestResult.confusion_matrix.true_negative ??
+                            mlTestResult.confusion_matrix.tn
+                          )}
                         </strong>
                       </div>
                       <div className="cm-cell negative">
                         <span className="cm-cell-label">False Attack (FP)</span>
                         <strong className="cm-cell-val">
-                          {formatValue(mlTestResult.confusion_matrix.false_positive ?? mlTestResult.confusion_matrix.fp)}
+                          {formatValue(
+                            mlTestResult.confusion_matrix.false_positives ??
+                            mlTestResult.confusion_matrix.false_positive ??
+                            mlTestResult.confusion_matrix.fp
+                          )}
                         </strong>
                       </div>
                       <div className="cm-cell negative">
                         <span className="cm-cell-label">Missed Attack (FN)</span>
                         <strong className="cm-cell-val">
-                          {formatValue(mlTestResult.confusion_matrix.false_negative ?? mlTestResult.confusion_matrix.fn)}
+                          {formatValue(
+                            mlTestResult.confusion_matrix.false_negatives ??
+                            mlTestResult.confusion_matrix.false_negative ??
+                            mlTestResult.confusion_matrix.fn
+                          )}
                         </strong>
                       </div>
                       <div className="cm-cell positive">
                         <span className="cm-cell-label">True Attack (TP)</span>
                         <strong className="cm-cell-val">
-                          {formatValue(mlTestResult.confusion_matrix.true_positive ?? mlTestResult.confusion_matrix.tp)}
+                          {formatValue(
+                            mlTestResult.confusion_matrix.true_positives ??
+                            mlTestResult.confusion_matrix.true_positive ??
+                            mlTestResult.confusion_matrix.tp
+                          )}
                         </strong>
                       </div>
                     </div>

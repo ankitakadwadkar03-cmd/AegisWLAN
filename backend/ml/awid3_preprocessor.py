@@ -15,13 +15,20 @@ import tempfile
 from pathlib import Path
 from typing import Any, Iterable, Iterator
 
+_backend_dir = str(Path(__file__).resolve().parents[1])
+if _backend_dir not in sys.path:
+    sys.path.insert(0, _backend_dir)
+
 try:
-    from .extracted_feature_schema import EXTRACTED_FEATURE_NAMES
+    from .burst_features_v3 import extract_burst_features
     from .feature_extractor import extract_window_features
+    from .v3_feature_schema import V3_FEATURE_COUNT, V3_FEATURE_NAMES
+    from .v3_feature_vector import features_to_v3_vector
 except ImportError:  # pragma: no cover - supports direct script execution.
-    sys.path.append(str(Path(__file__).resolve().parents[2]))
-    from backend.ml.extracted_feature_schema import EXTRACTED_FEATURE_NAMES
-    from backend.ml.feature_extractor import extract_window_features
+    from ml.burst_features_v3 import extract_burst_features
+    from ml.feature_extractor import extract_window_features
+    from ml.v3_feature_schema import V3_FEATURE_COUNT, V3_FEATURE_NAMES
+    from ml.v3_feature_vector import features_to_v3_vector
 
 
 DEFAULT_WINDOW_SECONDS = 5.0
@@ -167,15 +174,70 @@ def awid3_row_to_packet(row: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
-def awid3_label_to_binary(label: Any) -> int:
-    """Map AWID3 packet labels to NetShield binary window labels."""
+CONFIRMED_NORMAL_LABELS = {
+    "normal",
+    "0",
+}
 
+CONFIRMED_AWID3_ATTACK_CATEGORIES = {
+    "deauth",
+    "deauthentication",
+    "disas",
+    "disassociation",
+    "(re)assoc",
+    "reassoc",
+    "reassociation",
+    "rogueap",
+    "rogue_ap",
+    "rogue ap",
+    "eviltwin",
+    "evil_twin",
+    "evil twin",
+    "attack",
+    "1",
+}
+
+
+def awid3_label_to_binary(
+    label: Any,
+    label_mapping: dict[str, int] | None = None,
+) -> int:
+    """Map AWID3 packet labels to NetShield binary window labels.
+
+    Rejects unknown, empty, malformed, or unsupported labels by raising ValueError.
+    Does not silently map unknown labels to attack or normal.
+    An explicit label_mapping dictionary can be provided to support custom mappings.
+    """
     text = _clean_text(label)
 
-    if not text or text.lower() == "normal":
+    if not text:
+        raise ValueError("Invalid empty or missing AWID3 label. Ground-truth label is required.")
+
+    if label_mapping is not None:
+        if text in label_mapping:
+            mapped_val = label_mapping[text]
+            if mapped_val not in (0, 1):
+                raise ValueError(f"Explicit label mapping for '{text}' must map to 0 or 1, got {mapped_val}")
+            return mapped_val
+        if text.lower() in label_mapping:
+            mapped_val = label_mapping[text.lower()]
+            if mapped_val not in (0, 1):
+                raise ValueError(f"Explicit label mapping for '{text}' must map to 0 or 1, got {mapped_val}")
+            return mapped_val
+
+    lower_text = text.lower()
+
+    if lower_text in CONFIRMED_NORMAL_LABELS:
         return 0
 
-    return 1
+    if lower_text in CONFIRMED_AWID3_ATTACK_CATEGORIES:
+        return 1
+
+    raise ValueError(
+        f"Unsupported or unconfirmed AWID3 label category: {label!r}. "
+        f"Only confirmed Normal and confirmed AWID3 Attack categories are supported without an explicit mapping. "
+        f"Provide an explicit label_mapping to resolve."
+    )
 
 
 def _iter_csv_chunks(
@@ -252,6 +314,7 @@ def _build_sorted_runs(
     csv_path: Path,
     chunk_rows: int,
     temp_dir: Path,
+    label_mapping: dict[str, int] | None = None,
 ) -> list[Path]:
     run_paths: list[Path] = []
 
@@ -264,7 +327,9 @@ def _build_sorted_runs(
             if packet is None:
                 continue
 
-            sortable_rows.append((packet, awid3_label_to_binary(row.get(LABEL_COLUMN))))
+            sortable_rows.append(
+                (packet, awid3_label_to_binary(row.get(LABEL_COLUMN), label_mapping=label_mapping))
+            )
 
         if sortable_rows:
             run_paths.append(_write_sorted_run(sortable_rows, temp_dir, len(run_paths)))
@@ -284,16 +349,22 @@ def _iter_sorted_packets(
     csv_path: Path,
     chunk_rows: int,
     temp_dir: Path,
+    label_mapping: dict[str, int] | None = None,
 ) -> Iterator[tuple[dict[str, Any], int]]:
-    run_paths = _build_sorted_runs(csv_path, chunk_rows, temp_dir)
+    run_paths = _build_sorted_runs(csv_path, chunk_rows, temp_dir, label_mapping=label_mapping)
     run_iterators = [_iter_sorted_run(run_path) for run_path in run_paths]
 
     for _, label, packet in heapq.merge(*run_iterators, key=lambda item: item[0]):
         yield packet, label
 
 
-def iter_awid3_csv_files(input_path: str | Path) -> Iterator[Path]:
-    """Yield AWID3 CSV files from one file or directory tree."""
+def iter_awid3_csv_files(input_path: str | Path | Iterable[str | Path]) -> Iterator[Path]:
+    """Yield AWID3 CSV files from one file, directory tree, or sequence of paths."""
+
+    if isinstance(input_path, (list, tuple, set)):
+        for item in input_path:
+            yield from iter_awid3_csv_files(item)
+        return
 
     path = Path(input_path)
 
@@ -360,11 +431,17 @@ def _feature_row_for_window(
     label: int,
     window_seconds: float,
 ) -> dict[str, int | float | None]:
-    features = extract_window_features(packets, window_seconds=window_seconds)
-    ordered_row = {
-        feature_name: features[feature_name]
-        for feature_name in EXTRACTED_FEATURE_NAMES
-    }
+    base_features = extract_window_features(packets, window_seconds=window_seconds)
+    burst_features = extract_burst_features(packets, window_seconds=window_seconds)
+    combined = {**base_features, **burst_features}
+    vector = features_to_v3_vector(combined)
+
+    if len(vector) != V3_FEATURE_COUNT:
+        raise ValueError(
+            f"Expected {V3_FEATURE_COUNT} v3 features, got {len(vector)}."
+        )
+
+    ordered_row: dict[str, Any] = dict(zip(V3_FEATURE_NAMES, vector))
     ordered_row[OUTPUT_LABEL_COLUMN] = label
     return ordered_row
 
@@ -388,6 +465,7 @@ def process_awid3_csv_file(
     writer: csv.DictWriter,
     window_seconds: float = DEFAULT_WINDOW_SECONDS,
     chunk_rows: int = DEFAULT_CHUNK_ROWS,
+    label_mapping: dict[str, int] | None = None,
 ) -> int:
     """Process one AWID3 CSV file and append window feature rows."""
 
@@ -397,7 +475,12 @@ def process_awid3_csv_file(
     with tempfile.TemporaryDirectory(prefix="netshield_awid3_sort_") as temp_dir_name:
         temp_dir = Path(temp_dir_name)
 
-        for packet, label in _iter_sorted_packets(Path(csv_path), chunk_rows, temp_dir):
+        for packet, label in _iter_sorted_packets(
+            Path(csv_path),
+            chunk_rows,
+            temp_dir,
+            label_mapping=label_mapping,
+        ):
             completed_windows = accumulator.add_packet(packet, label)
             written_rows += _write_windows(writer, completed_windows, window_seconds)
 
@@ -406,16 +489,17 @@ def process_awid3_csv_file(
 
 
 def process_awid3_dataset(
-    input_path: str | Path,
+    input_path: str | Path | Iterable[str | Path],
     output_csv_path: str | Path,
     window_seconds: float = DEFAULT_WINDOW_SECONDS,
     chunk_rows: int = DEFAULT_CHUNK_ROWS,
+    label_mapping: dict[str, int] | None = None,
 ) -> int:
     """Preprocess AWID3 CSV files into NetShield feature rows."""
 
     output_path = Path(output_csv_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    fieldnames = [*EXTRACTED_FEATURE_NAMES, OUTPUT_LABEL_COLUMN]
+    fieldnames = [*V3_FEATURE_NAMES, OUTPUT_LABEL_COLUMN]
     total_windows = 0
 
     with output_path.open("w", newline="", encoding="utf-8") as output_file:
@@ -428,6 +512,7 @@ def process_awid3_dataset(
                 writer,
                 window_seconds=window_seconds,
                 chunk_rows=chunk_rows,
+                label_mapping=label_mapping,
             )
             output_file.flush()
 

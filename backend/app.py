@@ -399,32 +399,34 @@ def ml_test_schema():
     })
 
 
+ML_TEST_DATASETS_DIR = Path(__file__).resolve().parent / "data" / "ml_test_datasets"
+
+
 @app.get("/api/ml/test/datasets")
 def ml_test_datasets():
-    """List available evaluation CSV datasets in backend/data/."""
+    """List available evaluation CSV datasets in backend/data/ml_test_datasets/."""
     datasets = list_available_test_datasets()
     return jsonify({"count": len(datasets), "datasets": datasets})
 
 
 @app.post("/api/ml/test/run")
 def ml_test_run():
-    """Run full evaluation on a test CSV dataset with 31-feature schema validation."""
+    """Run full evaluation on a test CSV dataset strictly inside ml_test_datasets/."""
     data = request.get_json(silent=True) or {}
-    dataset_path = data.get("dataset_path")
+    dataset_param = data.get("dataset_name") or data.get("dataset_path")
 
-    if not dataset_path and data.get("dataset_name"):
-        candidate = Path(__file__).resolve().parent / "data" / data["dataset_name"]
-        if candidate.exists():
-            dataset_path = str(candidate)
-
-    if not dataset_path:
-        return jsonify({"error": "dataset_path or dataset_name required"}), 400
+    if not dataset_param:
+        return jsonify({"error": "dataset_name is required"}), 400
 
     try:
-        report = evaluate_test_dataset(dataset_path)
+        report = evaluate_test_dataset(dataset_param)
         run_id = save_ml_test_run(report)
         report["id"] = run_id
         return jsonify(report)
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 404
+    except ValueError as exc:
+        return jsonify({"error": f"Dataset validation error: {str(exc)}"}), 400
     except Exception as exc:
         return jsonify({"error": f"Evaluation failed: {str(exc)}"}), 500
 
