@@ -149,7 +149,7 @@ export const SettingsView = ({
                     setUiPrefs((prev) => ({ ...prev, defaultView: e.target.value }))
                   }
                 >
-                  <option value="Dashboard">Dashboard</option>
+                  <option value="Admin Dashboard">Admin Dashboard</option>
                   <option value="WiFi Scan">Wi-Fi Scan</option>
                   <option value="Live Monitor">Live Monitor</option>
                   <option value="ML Engine">ML Engine</option>
@@ -160,7 +160,7 @@ export const SettingsView = ({
                   <option value="Settings">Settings</option>
                 </select>
                 <span className="form-hint">
-                  The initial page opened when launching NetShield.
+                  The initial page opened when launching AegisWLAN.
                 </span>
               </div>
 

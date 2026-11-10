@@ -1,4 +1,5 @@
 import {
+  IconDashboard,
   IconWifi,
   IconActivity,
   IconCpu,
@@ -10,6 +11,12 @@ import {
 } from '../components/Icons'
 
 export const navGroups = [
+  {
+    group: 'OVERVIEW',
+    items: [
+      { id: 'Admin Dashboard', label: 'Admin Dashboard', icon: IconDashboard },
+    ],
+  },
   {
     group: 'MONITOR',
     items: [

@@ -36,7 +36,7 @@ export const WifiScanView = ({
     <div className="wifi-scan-view" aria-label="Wi-Fi scan">
       {wifiScanError ? <p className="error-banner">{wifiScanError}</p> : null}
 
-      {/* Unified Control & Telemetry Bar (Original NetShield Design) */}
+      {/* Unified Control & Telemetry Bar (AegisWLAN Design) */}
       <section className="panel wifi-scan-control-panel">
         <div className="scan-control-row">
           <div className="scan-control-left">

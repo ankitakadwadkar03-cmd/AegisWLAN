@@ -15,6 +15,8 @@ export const IncidentDrawer = ({
   incidentJsonExpanded,
   setIncidentJsonExpanded,
   handleUpdateIncidentStatus,
+  statusUpdating = false,
+  statusUpdateError = null,
   setActiveView,
   setMlEngineTab,
 }) => {
@@ -76,6 +78,7 @@ export const IncidentDrawer = ({
                   id="drawer-incident-status"
                   className="drawer-status-select"
                   value={selectedIncident.status || 'New'}
+                  disabled={statusUpdating}
                   onChange={(e) => handleUpdateIncidentStatus(selectedIncident.id, e.target.value)}
                   aria-label="Incident status selector"
                 >
@@ -83,8 +86,19 @@ export const IncidentDrawer = ({
                   <option value="Investigating">Investigating</option>
                   <option value="Resolved">Resolved</option>
                 </select>
+                {statusUpdating && (
+                  <span className="drawer-status-indicator" title="Persisting status update...">
+                    Saving...
+                  </span>
+                )}
               </div>
             </div>
+
+            {statusUpdateError && (
+              <div className="drawer-status-error-banner" role="alert">
+                <span>⚠ {statusUpdateError}</span>
+              </div>
+            )}
 
             <div className="drawer-prob-bar">
               <div className="drawer-prob-labels">

@@ -175,6 +175,79 @@ def get_incidents() -> list[dict]:
         return [dict(row) for row in cursor.fetchall()]
 
 
+_SELECT_INCIDENT_BY_ID_SQL = """
+SELECT
+    id,
+    created_at,
+    prediction,
+    label,
+    attack_probability,
+    normal_probability,
+    total_packets,
+    window_start,
+    window_end,
+    feature_count,
+    severity,
+    status
+FROM incidents
+WHERE id = ?;
+"""
+
+VALID_INCIDENT_STATUSES = {"New", "Investigating", "Resolved"}
+
+
+def get_incident_by_id(incident_id: int) -> dict | None:
+    """Retrieve a single incident by its ID."""
+    if not DB_PATH.exists():
+        return None
+
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.execute(_SELECT_INCIDENT_BY_ID_SQL, (incident_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+def update_incident_status(incident_id: int, new_status: str) -> dict | None:
+    """Update the triage status of an existing incident.
+
+    Args:
+        incident_id: The integer primary key of the incident.
+        new_status: One of 'New', 'Investigating', or 'Resolved'.
+
+    Returns:
+        The updated incident dictionary if found and updated, or None if not found.
+
+    Raises:
+        ValueError: If new_status is not a string or not in VALID_INCIDENT_STATUSES.
+    """
+    if not isinstance(new_status, str):
+        raise ValueError(
+            f"Invalid incident status type {type(new_status).__name__}. "
+            "Status must be a string."
+        )
+
+    clean_status = new_status.strip()
+    if clean_status not in VALID_INCIDENT_STATUSES:
+        raise ValueError(
+            f"Invalid incident status '{new_status}'. "
+            f"Must be one of {sorted(VALID_INCIDENT_STATUSES)}."
+        )
+
+    if not DB_PATH.exists():
+        return None
+
+    update_sql = "UPDATE incidents SET status = ? WHERE id = ?;"
+
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.execute(update_sql, (clean_status, incident_id))
+        conn.commit()
+        if cursor.rowcount == 0:
+            return None
+
+    return get_incident_by_id(incident_id)
+
+
 def save_pcap_analysis(report: dict) -> int:
     """Store a completed PCAP analysis report in the database."""
     initialize_database()

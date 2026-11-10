@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect, useRef } from 'react'
 import { IconX, IconBot } from './Icons'
 
 export const AdvisorDrawer = ({
@@ -9,10 +9,31 @@ export const AdvisorDrawer = ({
   advisorInput,
   setAdvisorInput,
 }) => {
+  const inputRef = useRef(null)
+
+  useEffect(() => {
+    if (!advisorOpen) return
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setAdvisorOpen(false)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    if (inputRef.current) {
+      inputRef.current.focus()
+    }
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [advisorOpen, setAdvisorOpen])
+
   if (!advisorOpen) return null
 
   return (
-    <div className="advisor-floating-panel">
+    <div
+      className="advisor-floating-panel"
+      role="dialog"
+      aria-modal="true"
+      aria-label="NetShield AI Wi-Fi Advisor"
+    >
       <div className="advisor-header">
         <div className="advisor-title-row">
           <span className="advisor-avatar">
@@ -95,6 +116,7 @@ export const AdvisorDrawer = ({
         className="advisor-input-form"
       >
         <input
+          ref={inputRef}
           type="text"
           className="advisor-input"
           placeholder="Ask about signal, security, bands..."

@@ -21,6 +21,7 @@ import { AdvisorDrawer } from './components/AdvisorDrawer'
 import { NetworkWhyDrawer } from './components/NetworkWhyDrawer'
 
 import { WifiScanView } from './views/WifiScanView'
+import { AdminDashboardView } from './views/AdminDashboardView'
 import { LiveMonitorView } from './views/LiveMonitorView'
 import { MlEngineView } from './views/MlEngineView'
 import { PcapAnalysisView } from './views/PcapAnalysisView'
@@ -30,6 +31,7 @@ import { ReportsView } from './views/ReportsView'
 import { SettingsView } from './views/SettingsView'
 
 const sidebarItems = [
+  'Admin Dashboard',
   'WiFi Scan',
   'Live Monitor',
   'ML Engine',
@@ -47,21 +49,21 @@ const ACTIVE_CAPTURE_STATES = ['starting', 'running', 'stopping']
 function App() {
   const [uiPrefs, setUiPrefs] = useState(() => {
     try {
-      const saved = localStorage.getItem('netshield_ui_prefs')
+      const saved = localStorage.getItem('netshield_ui_prefs') || localStorage.getItem('aegiswlan_ui_prefs')
       if (saved) return JSON.parse(saved)
     } catch {}
     return {
       pollInterval: 2000,
       visualAlerts: true,
       soundAlerts: false,
-      defaultView: 'WiFi Scan',
+      defaultView: 'Admin Dashboard',
       tableDensity: 'compact',
     }
   })
 
   const [activeView, setActiveView] = useState(() => {
     try {
-      const saved = localStorage.getItem('netshield_ui_prefs')
+      const saved = localStorage.getItem('netshield_ui_prefs') || localStorage.getItem('aegiswlan_ui_prefs')
       if (saved) {
         const parsed = JSON.parse(saved)
         if (parsed.defaultView && sidebarItems.includes(parsed.defaultView)) {
@@ -69,7 +71,7 @@ function App() {
         }
       }
     } catch {}
-    return 'WiFi Scan'
+    return 'Admin Dashboard'
   })
 
   const [interfaces, setInterfaces] = useState([])
@@ -101,6 +103,8 @@ function App() {
   const [selectedIncident, setSelectedIncident] = useState(null)
   const [incidentCopyStatus, setIncidentCopyStatus] = useState(null)
   const [incidentJsonExpanded, setIncidentJsonExpanded] = useState(false)
+  const [incidentStatusUpdating, setIncidentStatusUpdating] = useState(false)
+  const [incidentStatusError, setIncidentStatusError] = useState(null)
   const [reportIncidents, setReportIncidents] = useState([])
   const [reportsLoading, setReportsLoading] = useState(false)
   const [reportsError, setReportsError] = useState('')
@@ -571,8 +575,11 @@ function App() {
       const dList = datasetsRes?.datasets || []
       setMlDatasets(dList)
       if (dList.length > 0 && !selectedDataset) {
-        const preferred = dList.find((d) => d.name === 'awid3_v3_test_combined.csv') || dList[0]
-        setSelectedDataset(preferred.name || preferred.filename)
+        const validDatasets = dList.filter((d) => d.is_valid !== false && d.is_valid_schema !== false)
+        const preferred = validDatasets.find((d) => d.name === 'awid3_v3_test_combined.csv') || validDatasets[0]
+        if (preferred) {
+          setSelectedDataset(preferred.name || preferred.filename)
+        }
       }
       setMlSchemaInfo(schemaRes)
       const rList = runsRes?.runs || []
@@ -653,14 +660,41 @@ function App() {
     }
   }
 
-  const handleUpdateIncidentStatus = (id, newStatus) => {
+  const handleUpdateIncidentStatus = async (id, newStatus) => {
     if (!id || !newStatus) return
-    setIncidents((prev) =>
-      prev.map((inc) => (inc.id === id ? { ...inc, status: newStatus } : inc))
-    )
-    setSelectedIncident((prev) =>
-      prev && prev.id === id ? { ...prev, status: newStatus } : prev
-    )
+    const prevIncident = selectedIncident
+    setIncidentStatusUpdating(true)
+    setIncidentStatusError(null)
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/incidents/${id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: newStatus }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || `HTTP ${response.status}: Failed to update status`)
+      }
+
+      const data = await response.json()
+      const updatedIncident = data.incident || { ...prevIncident, status: newStatus }
+
+      setIncidents((prev) =>
+        prev.map((inc) => (inc.id === id ? updatedIncident : inc))
+      )
+      setSelectedIncident((prev) =>
+        prev && prev.id === id ? updatedIncident : prev
+      )
+    } catch (err) {
+      setIncidentStatusError(err.message || 'Failed to persist status change.')
+      setSelectedIncident(prevIncident)
+    } finally {
+      setIncidentStatusUpdating(false)
+    }
   }
 
   const handleOpenConnectModal = (network) => {
@@ -763,6 +797,11 @@ function App() {
       setMlTestingError('Please select a dataset to evaluate.')
       return
     }
+    const targetDataset = mlDatasets.find((d) => (d.filename || d.name) === selectedDataset)
+    if (targetDataset && (targetDataset.is_valid === false || targetDataset.is_valid_schema === false)) {
+      setMlTestingError(`Dataset "${selectedDataset}" is invalid: ${targetDataset.schema_status || 'Incompatible schema'}`)
+      return
+    }
     setMlTestingLoading(true)
     setMlTestingError('')
     try {
@@ -786,6 +825,7 @@ function App() {
       const next = typeof updater === 'function' ? updater(prev) : updater
       try {
         localStorage.setItem('netshield_ui_prefs', JSON.stringify(next))
+        localStorage.setItem('aegiswlan_ui_prefs', JSON.stringify(next))
         setSettingsSaveMsg('Preferences saved to local storage.')
         setTimeout(() => setSettingsSaveMsg(''), 2500)
       } catch {}
@@ -1180,6 +1220,8 @@ function App() {
         setActiveView={setActiveView}
         isCaptureRunning={isCaptureRunning}
         newIncidentsCount={newIncidents}
+        advisorOpen={advisorOpen}
+        setAdvisorOpen={setAdvisorOpen}
       />
 
       <div className="workspace">
@@ -1192,9 +1234,43 @@ function App() {
           highSeverityIncidents={highSeverityIncidents}
           visualAlerts={uiPrefs.visualAlerts}
           adapterName={monitoringInterface !== 'Not Selected' ? monitoringInterface : null}
+          advisorOpen={advisorOpen}
+          setAdvisorOpen={setAdvisorOpen}
         />
 
         <main className="main-content">
+          {activeView === 'Admin Dashboard' && (
+            <AdminDashboardView
+              networks={networks}
+              wifiScanLoading={wifiScanLoading}
+              wifiScanError={wifiScanError}
+              isScannerRunning={isScannerRunning}
+              scannerProgress={scannerProgress}
+              packets={packets}
+              isCaptureRunning={isCaptureRunning}
+              captureProgress={captureProgress}
+              liveMonitorError={liveMonitorError}
+              mlLiveStatus={mlLiveStatus}
+              incidents={incidents}
+              incidentsLoading={incidentsLoading}
+              incidentsError={incidentsError}
+              totalIncidents={totalIncidents}
+              newIncidents={newIncidents}
+              highSeverityIncidents={highSeverityIncidents}
+              recommendationsData={recommendationsData}
+              bestNetwork={bestNetwork}
+              setActiveView={setActiveView}
+              handleStartScan={handleStartScan}
+              handleStopScan={handleStopScan}
+              handleStartCapture={handleStartCapture}
+              handleStopCapture={handleStopCapture}
+              setSelectedIncident={setSelectedIncident}
+              handleOpenWhyDrawer={(net) => setWhyDrawerNetwork(net)}
+              monitoringInterface={monitoringInterface !== 'Not Selected' ? monitoringInterface : null}
+              setAdvisorOpen={setAdvisorOpen}
+            />
+          )}
+
           {activeView === 'WiFi Scan' && (
             <WifiScanView
               wifiScanError={wifiScanError}
@@ -1387,6 +1463,8 @@ function App() {
           incidentJsonExpanded={incidentJsonExpanded}
           setIncidentJsonExpanded={setIncidentJsonExpanded}
           handleUpdateIncidentStatus={handleUpdateIncidentStatus}
+          statusUpdating={incidentStatusUpdating}
+          statusUpdateError={incidentStatusError}
           setActiveView={setActiveView}
           setMlEngineTab={setMlEngineTab}
         />

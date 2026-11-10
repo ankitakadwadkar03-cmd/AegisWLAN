@@ -1,5 +1,6 @@
 import React from 'react'
 import { navGroups } from '../utils/navigation'
+import { IconBot } from './Icons'
 
 export const Header = ({
   activeView,
@@ -10,6 +11,8 @@ export const Header = ({
   highSeverityIncidents,
   visualAlerts,
   adapterName,
+  advisorOpen,
+  setAdvisorOpen,
 }) => {
   let groupName = 'MONITOR'
   for (const g of navGroups) {
@@ -20,7 +23,7 @@ export const Header = ({
   }
 
   return (
-    <header className="top-header">
+    <header className="top-header" aria-label="NetShield Top Navigation">
       <div className="header-breadcrumbs">
         <span className="breadcrumb-category">{groupName}</span>
         <span className="breadcrumb-separator">/</span>
@@ -28,6 +31,18 @@ export const Header = ({
       </div>
 
       <div className="header-status-group">
+        <button
+          type="button"
+          className={`header-advisor-trigger ${advisorOpen ? 'active' : ''}`}
+          onClick={() => setAdvisorOpen && setAdvisorOpen((prev) => !prev)}
+          title="Open NetShield AI Wi-Fi Advisor"
+          aria-label="Toggle NetShield AI Wi-Fi Advisor"
+          aria-expanded={Boolean(advisorOpen)}
+        >
+          <IconBot size={15} />
+          <span>AI Advisor</span>
+        </button>
+
         {adapterName ? (
           <div className="header-adapter-pill" title="Active Network Interface">
             <span className="pill-dot" />

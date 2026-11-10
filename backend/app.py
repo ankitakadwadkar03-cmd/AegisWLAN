@@ -24,6 +24,8 @@ import os
 from ml.inference_service import create_v3_inference_service
 from data.incident_store import (
     get_incidents,
+    get_incident_by_id,
+    update_incident_status,
     save_pcap_analysis,
     get_pcap_analyses,
     get_pcap_analysis_by_id,
@@ -212,6 +214,41 @@ def incidents():
             "count": len(incident_rows),
             "incidents": incident_rows,
         }
+    )
+
+
+@app.patch("/api/incidents/<int:incident_id>")
+def incident_update_status(incident_id: int):
+    """Update triage status for a specific incident (New, Investigating, Resolved)."""
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or "status" not in data:
+        return (
+            jsonify({"error": "Request body must be a JSON object containing 'status'."}),
+            400,
+        )
+
+    raw_status = data["status"]
+    if not isinstance(raw_status, str):
+        return (
+            jsonify({"error": "The 'status' field must be a string."}),
+            400,
+        )
+
+    new_status = raw_status.strip()
+    try:
+        updated = update_incident_status(incident_id, new_status)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    if updated is None:
+        return jsonify({"error": f"Incident #{incident_id} not found."}), 404
+
+    return (
+        jsonify({
+            "message": f"Incident #{incident_id} status updated to '{new_status}'.",
+            "incident": updated,
+        }),
+        200,
     )
 
 

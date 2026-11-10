@@ -1,67 +1,86 @@
 :root {
-  /* Midnight Plum & Rose Palette */
-  --surface: #100D18;            /* Main application background */
-  --sidebar-bg: #0B0912;         /* Sidebar background */
-  --header-bg: #110E19;          /* Header background */
-  --panel: #1C1726;              /* Standard card background */
-  --panel-muted: #171320;        /* Subtle contrast sub-surfaces */
-  --panel-elevated: #262033;      /* Elevated card background */
-  --input-bg: #211B2D;           /* Input background */
+  /* NetShield – Aqua & Coral (Refined Edition) Design System Tokens */
+  --surface: #E3F5F5;            /* Main application workspace canvas (pale aqua) */
+  --sidebar-bg: #09434A;         /* Deep Teal sidebar background */
+  --header-bg: #FFFFFF;          /* Clean white top header */
+  --panel: #FFF9F6;              /* Main card surfaces (warm ivory blush) */
+  --panel-muted: #D9EEEE;        /* Secondary sub-surfaces, control bars & table headers */
+  --panel-elevated: #FFFFFF;     /* Elevated card background & input surfaces */
+  --input-bg: #FFFFFF;           /* Crisp input background */
 
   /* Borders & Separators */
-  --border: #393044;             /* Borders and separators */
-  --border-subtle: #2d2637;
-  --border-strong: #4f435e;
+  --border: #C7DEDF;             /* Standard panel & card borders (soft teal-grey) */
+  --border-subtle: #DDECEC;      /* Hairline dividers & list separators */
+  --border-strong: #A8C9CB;      /* Focused / active borders */
+  --border-sidebar: rgba(255, 255, 255, 0.12); /* Translucent sidebar dividers */
 
-  /* Typography */
-  --text: #F5F0FA;               /* Main text */
-  --text-strong: #F5F0FA;        /* Heading & strong text */
-  --text-secondary: #B8ACBF;     /* Secondary text */
-  --text-muted: #B8ACBF;         /* Muted / secondary text */
-  --text-subtle: #8D8198;        /* Subtle / caption text */
+  /* Typography Inks */
+  --text: #18343A;               /* Primary body typography (dark slate-petrol ink) */
+  --text-strong: #0E2328;        /* Headings & key telemetry numbers (deepest petrol ink) */
+  --text-secondary: #526B70;     /* Subtitles & card captions (muted teal-slate) */
+  --text-muted: #526B70;         /* Muted labels & descriptive copy */
+  --text-subtle: #728A8F;        /* Timestamps, mono hints & micro-labels */
 
-  /* Primary Accent: Soft Violet */
-  --accent: #C084FC;             /* Primary accent */
-  --accent-hover: #A855F7;       /* Primary accent hover */
-  --accent-light: rgba(192, 132, 252, 0.16); /* Accent soft tint */
-  --accent-text: #C084FC;        /* Violet text */
-  --accent-glow: rgba(192, 132, 252, 0.25);
+  /* Primary Interactive Accents: Cyan Teal */
+  --accent: #0891B2;             /* Cyan teal for badges, icons, highlights & focus rings */
+  --accent-hover: #0E7490;       /* Interactive hover state */
+  --accent-light: rgba(8, 145, 178, 0.12); /* Subtle accent wash */
+  --accent-text: #0E7490;        /* Saturated cyan teal text for light surfaces (5.36:1 AA) */
+  --accent-glow: rgba(8, 145, 178, 0.22);
 
-  /* Secondary Accent: Muted Rose */
-  --accent-rose: #F09AB8;        /* Secondary accent */
-  --accent-rose-hover: #E879A9;
-  --accent-rose-light: rgba(240, 154, 184, 0.16);
-  --accent-rose-text: #F09AB8;
+  /* Primary Action Button (Calibrated for WCAG AA 5.36:1 with White Text) */
+  --accent-btn: #0E7490;         /* Solid primary action button background */
+  --accent-btn-hover: #155E75;   /* Primary button hover (7.27:1 AAA) */
 
-  /* Plum-to-Rose Primary Action Gradient */
-  --gradient-primary: linear-gradient(135deg, #A855F7 0%, #F09AB8 100%);
-  --gradient-primary-hover: linear-gradient(135deg, #9333EA 0%, #E879A9 100%);
+  /* Coral Secondary Accent (Restrained: Threat surge peaks, alert dots, top highlight bars) */
+  --coral: #F97373;              /* Soft refined coral */
+  --coral-light: rgba(249, 115, 115, 0.15); /* Coral soft background wash */
+  --coral-text: #B91C1C;         /* Saturated dark red for readable text on coral */
+  --coral-border: #F97373;
+
+  /* Secondary Accent: Cyan for Telemetry & Live Feeds (Backward Compatible) */
+  --cyan: #0891B2;
+  --cyan-hover: #0E7490;
+  --cyan-light: rgba(8, 145, 178, 0.12);
+  --cyan-text: #0E7490;
+
+  /* Action Gradients (WCAG AA Compliant with White Text) */
+  --gradient-primary: linear-gradient(135deg, #0E7490 0%, #0891B2 100%);
+  --gradient-primary-hover: linear-gradient(135deg, #155E75 0%, #0E7490 100%);
 
   /* Navigation Selected */
-  --nav-selected: #38223F;       /* Active navigation background */
+  --nav-selected: #0891B2;       /* Active navigation background */
 
-  /* Status Colors */
-  --danger: #FB7185;             /* Error / security alert */
-  --danger-light: rgba(251, 113, 133, 0.14);
-  --danger-text: #FB7185;
-  --danger-border: rgba(251, 113, 133, 0.35);
+  /* Semantic Status Colors (Strict Separation: Red = Attack, Amber = Warning, Green = Healthy) */
+  --danger: #DC2626;             /* Critical attack / intrusion incident */
+  --danger-light: #FEE2E2;       /* Soft red fill */
+  --danger-text: #991B1B;        /* Dark red text (6.80:1 contrast AAA Pass) */
+  --danger-border: rgba(220, 38, 38, 0.35);
+  --danger-glow: rgba(220, 38, 38, 0.25);
 
-  --warning: #FBBF24;            /* Warning */
-  --warning-light: rgba(251, 191, 36, 0.14);
-  --warning-text: #FBBF24;
-  --warning-border: rgba(251, 191, 36, 0.35);
+  --warning: #B7791F;            /* Warning / unencrypted open AP / guarded posture */
+  --warning-light: #FEF3C7;      /* Soft yellow fill */
+  --warning-text: #92400E;       /* Dark amber text (6.37:1 contrast AAA Pass) */
+  --warning-border: rgba(183, 121, 31, 0.35);
+  --warning-glow: rgba(183, 121, 31, 0.25);
 
-  --success: #4ADE80;            /* Success */
-  --success-light: rgba(74, 222, 128, 0.14);
-  --success-text: #4ADE80;
-  --success-border: rgba(74, 222, 128, 0.35);
+  --success: #15803D;            /* Healthy / clean AWID3 ML prediction (Normal) */
+  --success-light: #DCFCE7;      /* Soft green fill */
+  --success-text: #166534;       /* Dark green text (6.49:1 contrast AAA Pass) */
+  --success-border: rgba(21, 128, 61, 0.35);
+  --success-glow: rgba(21, 128, 61, 0.25);
 
-  /* Elevation Shadows */
-  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 4px 8px -1px rgba(0, 0, 0, 0.45), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 12px 24px -4px rgba(0, 0, 0, 0.65), 0 4px 6px -4px rgba(0, 0, 0, 0.4);
+  --info: #397A91;               /* Informational / general standby */
+  --info-light: #E0F2FE;         /* Soft pale blue fill */
+  --info-text: #0369A1;          /* Dark blue text */
+  --info-border: rgba(57, 122, 145, 0.35);
 
-  /* Typography */
+  /* Elevation Shadows (Soft, Natural SaaS Depth) */
+  --shadow-sm: 0 1px 3px rgba(24, 52, 58, 0.05), 0 1px 2px rgba(24, 52, 58, 0.03);
+  --shadow-md: 0 4px 12px rgba(24, 52, 58, 0.07), 0 2px 4px rgba(24, 52, 58, 0.04);
+  --shadow-lg: 0 10px 24px rgba(24, 52, 58, 0.09), 0 4px 8px rgba(24, 52, 58, 0.04);
+
+  /* Typography Stacks */
   --mono: 'JetBrains Mono', 'Fira Code', 'SFMono-Regular', Consolas, Menlo, monospace;
   --sans: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 
