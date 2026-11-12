@@ -1,0 +1,634 @@
+diff --git a/backend/scanner/wifi_scanner.py b/backend/scanner/wifi_scanner.py
+index 51f71df..33e5ee6 100644
+--- a/backend/scanner/wifi_scanner.py
++++ b/backend/scanner/wifi_scanner.py
+@@ -37,7 +37,7 @@ def _run_command(command: list[str], check: bool = True) -> subprocess.Completed
+ def set_channel(interface: str, channel: int) -> bool:
+     """Switch the wireless interface to a WiFi channel."""
+     result = _run_command(
+-        ["iwconfig", interface, "channel", str(channel)],
++        ["iw", "dev", interface, "set", "channel", str(channel)],
+         check=False,
+     )
+
+@@ -120,29 +120,122 @@ def _require_command(command_name: str) -> None:
+         raise RuntimeError(f"Required command not found: {command_name}")
+
++def _restart_network_services() -> None:
++    """Attempt to restart standard networking services stopped by airmon-ng."""
++    for service_name in ("NetworkManager", "wpa_supplicant"):
++        try:
++            _run_command(
++                ["systemctl", "start", service_name],
++                check=False,
++            )
++        except Exception as exc:
++            print(
++                f"Warning: unable to restart {service_name}: {exc}",
++                file=sys.stderr,
++            )
++
++
++def _get_interfaces_state() -> dict[str, str]:
++    """Return a mapping of wireless interface names to their type (mode) from iw dev."""
++    result = _run_command(["iw", "dev"], check=False)
++    if result.returncode != 0:
++        return {}
++
++    interfaces: dict[str, str] = {}
++    current_iface: str | None = None
++
++    for raw_line in result.stdout.splitlines():
++        line = raw_line.strip()
++        if line.startswith("Interface "):
++            current_iface = line.split(" ", 1)[1].strip()
++            interfaces[current_iface] = "unknown"
++        elif current_iface and line.startswith("type "):
++            interfaces[current_iface] = line.split(" ", 1)[1].strip()
++
++    return interfaces
++
++
+ def enable_monitor_mode(interface: str) -> str:
+     """Enable monitor mode using airmon-ng and return the monitor interface name."""
+
+-    for command_name in ("iwconfig", "airmon-ng", "iw"):
++    for command_name in ("airmon-ng", "iw"):
+         _require_command(command_name)
+
++    monitor_interface: str | None = None
+     try:
+         _run_command(["airmon-ng", "check", "kill"], check=False)
+         result = _run_command(["airmon-ng", "start", interface])
++        monitor_interface = _parse_monitor_interface(result.stdout, interface)
++        _verify_monitor_mode(monitor_interface)
++        return monitor_interface
+     except subprocess.CalledProcessError as exc:
+-        raise RuntimeError(
+-            f"Could not enable monitor mode for {interface}: {exc.stderr.strip() or exc.stdout.strip()}"
+-        ) from exc
++        details = (
++            exc.stderr.strip()
++            or exc.stdout.strip()
++            or "command failed"
++        )
++        if exc.stdout:
++            parsed = _parse_monitor_interface(exc.stdout, interface)
++            if parsed != interface:
++                monitor_interface = parsed
++        if not monitor_interface and _interface_exists(f"{interface}mon"):
++            monitor_interface = f"{interface}mon"
++
++        if monitor_interface and monitor_interface != interface:
++            try:
++                restore_managed_mode(monitor_interface, original_interface=interface)
++            except Exception as cleanup_err:
++                print(
++                    f"Warning: error cleaning up {monitor_interface}: {cleanup_err}",
++                    file=sys.stderr,
++                )
++        else:
++            _restart_network_services()
++
++        error_msg = f"Could not enable monitor mode for {interface}: {details}"
++        print(f"Error: {error_msg}", file=sys.stderr)
++        err = RuntimeError(error_msg)
++        if monitor_interface:
++            err.monitor_interface = monitor_interface
++        raise err from exc
++    except Exception as exc:
++        print(
++            f"Error: could not enable monitor mode for {interface}: {exc}",
++            file=sys.stderr,
++        )
++        cleanup_target = monitor_interface
++        if not cleanup_target or cleanup_target == interface:
++            if _interface_exists(f"{interface}mon"):
++                cleanup_target = f"{interface}mon"
++
++        if cleanup_target and cleanup_target != interface:
++            try:
++                restore_managed_mode(cleanup_target, original_interface=interface)
++            except Exception as cleanup_err:
++                print(
++                    f"Warning: error cleaning up {cleanup_target}: {cleanup_err}",
++                    file=sys.stderr,
++                )
++        else:
++            _restart_network_services()
+
+-    monitor_interface = _parse_monitor_interface(result.stdout, interface)
+-    _verify_monitor_mode(monitor_interface)
+-    return monitor_interface
++        exc.monitor_interface = cleanup_target
++        raise
+
+ def _parse_monitor_interface(airmon_output: str, interface: str) -> str:
+     for line in airmon_output.splitlines():
+-        if "monitor mode" in line.lower() and "enabled" in line.lower():
+-            tokens = line.replace(")", " ").replace("(", " ").split()
++        lowered = line.lower()
++        if "monitor mode" in lowered and "enabled" in lowered:
++            cleaned_line = (
++                line.replace(")", " ")
++                .replace("(", " ")
++                .replace("[", " ")
++                .replace("]", " ")
++                .replace(":", " ")
++                .replace(",", " ")
++            )
++            tokens = cleaned_line.split()
+             for token in reversed(tokens):
+                 if token.startswith(interface) and token != interface:
+                     return token
+@@ -150,12 +243,18 @@ def _parse_monitor_interface(airmon_output: str, interface: str) -> str:
+     candidate = f"{interface}mon"
+     if _interface_exists(candidate):
+         return candidate
++
++    interfaces_state = _get_interfaces_state()
++    for name, mode in interfaces_state.items():
++        if mode == "monitor" and (name == candidate or (name.startswith(interface) and name != interface)):
++            return name
++
+     return interface
+
+ def _interface_exists(interface: str) -> bool:
+     try:
+-        _run_command(["iwconfig", interface])
++        _run_command(["iw", "dev", interface, "info"])
+         return True
+     except subprocess.CalledProcessError:
+         return False
+@@ -163,37 +262,92 @@ def _interface_exists(interface: str) -> bool:
+
+ def _verify_monitor_mode(interface: str) -> None:
+     try:
+-        result = _run_command(["iwconfig", interface])
++        result = _run_command(["iw", "dev", interface, "info"])
+     except subprocess.CalledProcessError as exc:
+-        raise RuntimeError(f"Could not verify interface {interface}: {exc.stderr.strip()}") from exc
++        details = (
++            exc.stderr.strip()
++            or exc.stdout.strip()
++            or "command failed"
++        )
++        raise RuntimeError(
++            f"Could not verify interface {interface}: {details}"
++        ) from exc
+
+-    if "mode:monitor" not in result.stdout.lower().replace(" ", ""):
+-        raise RuntimeError(f"Interface {interface} is not in monitor mode.")
++    detected_type: str | None = None
++    for raw_line in result.stdout.splitlines():
++        line = raw_line.strip()
++        if line.startswith("type "):
++            detected_type = line.split(" ", 1)[1].strip()
++            break
+
++    if detected_type != "monitor":
++        type_str = detected_type if detected_type is not None else "unknown"
++        raise RuntimeError(
++            f"Interface {interface} is not in monitor mode (detected type: {type_str})."
++        )
+
+-def restore_managed_mode(interface: str) -> None:
+-    """Disable monitor mode and restart normal WiFi services."""
+-    result = _run_command(
+-        ["airmon-ng", "stop", interface],
+-        check=False,
+-    )
+
+-    if result.returncode != 0:
+-        details = result.stderr.strip() or result.stdout.strip()
++def restore_managed_mode(interface: str, original_interface: str | None = None) -> None:
++    """Disable monitor mode, verify interface restoration with iw dev, and restart WiFi services."""
++    if original_interface is None:
++        if interface.endswith("mon"):
++            original_interface = interface[:-3]
++        else:
++            original_interface = interface
++
++    airmon_output = ""
++    try:
++        result = _run_command(
++            ["airmon-ng", "stop", interface],
++            check=False,
++        )
++        airmon_output = (result.stderr.strip() or result.stdout.strip() or "")
++        if result.returncode != 0:
++            print(
++                f"Warning: could not restore {interface}: {airmon_output}",
++                file=sys.stderr,
++            )
++    except Exception as exc:
++        airmon_output = f"Execution error: {exc}"
+         print(
+-            f"Warning: could not restore {interface}: {details}",
++            f"Warning: error stopping monitor interface {interface}: {exc}",
+             file=sys.stderr,
+         )
++    finally:
++        _restart_network_services()
+
+-    # airmon-ng check kill may stop these normal WiFi services.
+-    _run_command(
+-        ["systemctl", "start", "NetworkManager"],
+-        check=False,
+-    )
+-    _run_command(
+-        ["systemctl", "start", "wpa_supplicant"],
+-        check=False,
+-    )
++    # Verify the resulting wireless interface state using iw dev
++    verified = False
++    interfaces_state: dict[str, str] = {}
++    deadline = time.monotonic() + 1.5
++
++    while True:
++        interfaces_state = _get_interfaces_state()
++
++        if interface != original_interface:
++            monitor_removed = interface not in interfaces_state
++        else:
++            monitor_removed = interfaces_state.get(interface) != "monitor"
++
++        orig_managed = interfaces_state.get(original_interface) == "managed"
++
++        if monitor_removed and orig_managed:
++            verified = True
++            break
++
++        if time.monotonic() >= deadline:
++            break
++        time.sleep(0.1)
++
++    if not verified:
++        state_repr = ", ".join(f"{k}={v}" for k, v in interfaces_state.items()) if interfaces_state else "none"
++        diag_msg = (
++            f"Automatic restoration failed for monitor interface '{interface}' (target managed: '{original_interface}'). "
++            f"airmon-ng stop output: '{airmon_output}'. "
++            f"Detected interface state: [{state_repr}]."
++        )
++        print(f"Error: {diag_msg}", file=sys.stderr)
++        raise RuntimeError(diag_msg)
+
+ def scan_networks(
+@@ -386,6 +540,15 @@ def main() -> int:
+     stop_requested = False
+     monitor_interface: str | None = None
+     monitor_mode_created = False
++    status_path = (
++        Path(args.output).parent
++        / "scanner_status.json"
++    )
++    scan_channels: list[int] = []
++    sweep_number = 0
++    last_sweep_completed_at: str | None = None
++    scanner_exception: Exception | None = None
++    cleanup_exception: Exception | None = None
+
+     def request_stop(_signum: int, _frame: Any) -> None:
+         nonlocal stop_requested
+@@ -400,18 +563,21 @@ def main() -> int:
+         if args.no_monitor_setup:
+             monitor_interface = args.interface
+         else:
+-            monitor_interface = enable_monitor_mode(args.interface)
+-            monitor_mode_created = True
++            try:
++                monitor_interface = enable_monitor_mode(args.interface)
++                monitor_mode_created = True
++            except Exception as init_exc:
++                created_iface = getattr(init_exc, "monitor_interface", None)
++                if not created_iface and _interface_exists(f"{args.interface}mon"):
++                    created_iface = f"{args.interface}mon"
++                if created_iface:
++                    monitor_interface = created_iface
++                    monitor_mode_created = True
++                raise
+
+         print(f"Scanning on monitor interface: {monitor_interface}")
+
+         scan_channels = get_enabled_channels(monitor_interface)
+-        status_path = (
+-            Path(args.output).parent
+-            / "scanner_status.json"
+-        )
+-        sweep_number = 0
+-        last_sweep_completed_at = None
+
+         _write_scanner_status(
+             status_path,
+@@ -492,24 +658,68 @@ def main() -> int:
+
+             _print_table(known_networks)
+
+-    except PermissionError:
++    except PermissionError as exc:
++        scanner_exception = exc
+         print(
+             "Permission denied. Run this scanner with sudo/root privileges.",
+             file=sys.stderr,
+         )
+         return 1
+     except RuntimeError as exc:
++        scanner_exception = exc
+         print(f"Error: {exc}", file=sys.stderr)
+         return 1
++    except KeyboardInterrupt as exc:
++        scanner_exception = exc
++        print("\nScan interrupted by user.", file=sys.stderr)
++        return 0
+     except Exception as exc:
++        scanner_exception = exc
+         print(f"Unexpected error: {exc}", file=sys.stderr)
+         return 1
+     finally:
+         if monitor_mode_created and monitor_interface:
++            try:
++                print(
++                    f"Restoring {monitor_interface} to managed mode..."
++                )
++                restore_managed_mode(monitor_interface, original_interface=args.interface)
++            except Exception as exc:
++                cleanup_exception = exc
++                print(
++                    f"Warning: error restoring {monitor_interface}: {exc}",
++                    file=sys.stderr,
++                )
++
++        try:
++            status_state = "error" if (scanner_exception or cleanup_exception) else "stopped"
++            status_interface = monitor_interface if cleanup_exception else None
++            _write_scanner_status(
++                status_path,
++                state=status_state,
++                interface=status_interface,
++                sweep_number=sweep_number,
++                current_channel=None,
++                channels_completed=(
++                    0 if stop_requested else len(scan_channels)
++                ),
++                total_channels=len(scan_channels),
++                enabled_channels=scan_channels,
++                session_network_count=len(known_networks),
++                last_sweep_completed_at=last_sweep_completed_at,
++            )
++        except Exception as exc:
+             print(
+-                f"Restoring {monitor_interface} to managed mode..."
++                f"Warning: unable to write final scanner status: {exc}",
++                file=sys.stderr,
+             )
+-            restore_managed_mode(monitor_interface)
++
++    if cleanup_exception:
++        print(
++            f"Error: automatic monitor-mode cleanup failed for {monitor_interface}: {cleanup_exception}",
++            file=sys.stderr,
++        )
++        return 1
+
+     print("\nScanner stopped. Latest CSV saved successfully.")
+     return 0
+
+diff --git a/backend/test_wifi_scanner.py b/backend/test_wifi_scanner.py
+new file mode 100644
+index 0000000..acd2146
+--- /dev/null
++++ b/backend/test_wifi_scanner.py
+@@ -0,0 +1,233 @@
++"""Focused unit tests for Wi-Fi scanner monitor-mode initialization, restoration, and cleanup."""
++
++from __future__ import annotations
++
++import json
++import subprocess
++import sys
++import tempfile
++from pathlib import Path
++from unittest.mock import MagicMock, patch
++
++import pytest
++
++# Ensure backend/scanner is in sys.path
++scanner_dir = Path(__file__).resolve().parent / "scanner"
++if str(scanner_dir) not in sys.path:
++    sys.path.insert(0, str(scanner_dir))
++
++import wifi_scanner
++
++
++def test_successful_monitor_interface_creation():
++    """Test successful monitor interface creation and parsing."""
++    airmon_stdout = (
++        "PHY\tInterface\tDriver\t\tChipset\n"
++        "phy0\twlan0\t\tath9k_htc\tQualcomm Atheros\n\n"
++        "\t\t(mac80211 monitor mode vif enabled for [phy0]wlan0 on [phy0]wlan0mon)\n"
++        "\t\t(mac80211 station mode vif disabled for [phy0]wlan0)\n"
++    )
++
++    with patch("wifi_scanner._require_command"), \
++         patch("wifi_scanner._run_command") as mock_run, \
++         patch("wifi_scanner._verify_monitor_mode") as mock_verify:
++
++        mock_run.side_effect = [
++            subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),  # airmon-ng check kill
++            subprocess.CompletedProcess(args=[], returncode=0, stdout=airmon_stdout, stderr=""),  # airmon-ng start
++        ]
++
++        result = wifi_scanner.enable_monitor_mode("wlan0")
++        assert result == "wlan0mon"
++        mock_verify.assert_called_once_with("wlan0mon")
++
++
++def test_verification_failure_after_interface_creation_cleans_up():
++    """Test that if airmon-ng start creates a monitor interface but verification fails,
++    the interface is identified, cleaned up, and the name is retained on the exception.
++    """
++    airmon_stdout = (
++        "(mac80211 monitor mode vif enabled for [phy0]wlan0 on [phy0]wlan0mon)\n"
++    )
++
++    with patch("wifi_scanner._require_command"), \
++         patch("wifi_scanner._run_command") as mock_run, \
++         patch("wifi_scanner._verify_monitor_mode") as mock_verify, \
++         patch("wifi_scanner.restore_managed_mode") as mock_restore:
++
++        mock_run.side_effect = [
++            subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),  # airmon-ng check kill
++            subprocess.CompletedProcess(args=[], returncode=0, stdout=airmon_stdout, stderr=""),  # airmon-ng start
++        ]
++        mock_verify.side_effect = RuntimeError(
++            "Interface wlan0mon is not in monitor mode (detected type: managed)."
++        )
++
++        with pytest.raises(RuntimeError) as exc_info:
++            wifi_scanner.enable_monitor_mode("wlan0")
++
++        assert "not in monitor mode" in str(exc_info.value)
++        # Ensure the monitor interface was identified and passed to restore_managed_mode
++        mock_restore.assert_called_once_with("wlan0mon", original_interface="wlan0")
++        # Ensure the monitor interface was not lost on the exception
++        assert getattr(exc_info.value, "monitor_interface", None) == "wlan0mon"
++
++
++def test_successful_automatic_restoration():
++    """Test successful restore_managed_mode verifying state via iw dev."""
++    iw_dev_output = (
++        "phy#0\n"
++        "\tInterface wlan0\n"
++        "\t\tifindex 3\n"
++        "\t\twdev 0x1\n"
++        "\t\taddr 00:c0:ca:97:5a:d4\n"
++        "\t\ttype managed\n"
++        "\t\ttxpower 20.00 dBm\n"
++    )
++
++    with patch("wifi_scanner._run_command") as mock_run, \
++         patch("wifi_scanner._restart_network_services") as mock_restart:
++
++        def run_cmd(cmd, **kwargs):
++            if cmd[:2] == ["airmon-ng", "stop"]:
++                return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="Interface wlan0mon stopped", stderr="")
++            if cmd == ["iw", "dev"]:
++                return subprocess.CompletedProcess(args=cmd, returncode=0, stdout=iw_dev_output, stderr="")
++            return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
++
++        mock_run.side_effect = run_cmd
++
++        # Should complete without error
++        wifi_scanner.restore_managed_mode("wlan0mon", original_interface="wlan0")
++        mock_restart.assert_called_once()
++
++
++def test_monitor_interface_remaining_after_failed_restoration():
++    """Test that if the monitor interface is still present after airmon-ng stop,
++    restore_managed_mode raises a RuntimeError with diagnostic details.
++    """
++    iw_dev_output = (
++        "phy#0\n"
++        "\tInterface wlan0mon\n"
++        "\t\ttype monitor\n"
++        "\tInterface wlan0\n"
++        "\t\ttype managed\n"
++    )
++
++    with patch("wifi_scanner._run_command") as mock_run, \
++         patch("wifi_scanner._restart_network_services"):
++
++        def run_cmd(cmd, **kwargs):
++            if cmd[:2] == ["airmon-ng", "stop"]:
++                return subprocess.CompletedProcess(args=cmd, returncode=1, stdout="", stderr="Device or resource busy")
++            if cmd == ["iw", "dev"]:
++                return subprocess.CompletedProcess(args=cmd, returncode=0, stdout=iw_dev_output, stderr="")
++            return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
++
++        mock_run.side_effect = run_cmd
++
++        with pytest.raises(RuntimeError) as exc_info:
++            wifi_scanner.restore_managed_mode("wlan0mon", original_interface="wlan0")
++
++        err_msg = str(exc_info.value)
++        assert "Automatic restoration failed" in err_msg
++        assert "Device or resource busy" in err_msg
++        assert "wlan0mon=monitor" in err_msg or "wlan0mon" in err_msg
++
++
++def test_original_interface_not_managed_after_restoration():
++    """Test that if original interface does not return to managed mode, restoration fails."""
++    iw_dev_output = (
++        "phy#0\n"
++        "\tInterface wlan0\n"
++        "\t\ttype monitor\n"
++    )
++
++    with patch("wifi_scanner._run_command") as mock_run, \
++         patch("wifi_scanner._restart_network_services"):
++
++        def run_cmd(cmd, **kwargs):
++            if cmd[:2] == ["airmon-ng", "stop"]:
++                return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="Stopped", stderr="")
++            if cmd == ["iw", "dev"]:
++                return subprocess.CompletedProcess(args=cmd, returncode=0, stdout=iw_dev_output, stderr="")
++            return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
++
++        mock_run.side_effect = run_cmd
++
++        with pytest.raises(RuntimeError) as exc_info:
++            wifi_scanner.restore_managed_mode("wlan0mon", original_interface="wlan0")
++
++        assert "Automatic restoration failed" in str(exc_info.value)
++        assert "wlan0=monitor" in str(exc_info.value)
++
++
++def test_main_cleanup_errors_without_hiding_original_scanner_exception():
++    """Test that a cleanup exception in finally does not mask or replace the original scanner exception."""
++    with tempfile.TemporaryDirectory() as tmpdir:
++        csv_path = Path(tmpdir) / "scan.csv"
++        status_path = Path(tmpdir) / "scanner_status.json"
++
++        with patch("wifi_scanner._parse_args") as mock_args, \
++             patch("wifi_scanner.enable_monitor_mode", return_value="wlan0mon"), \
++             patch("wifi_scanner.get_enabled_channels", return_value=[1, 6]), \
++             patch("wifi_scanner.scan_networks", side_effect=RuntimeError("Hardware link dropped")), \
++             patch("wifi_scanner.restore_managed_mode", side_effect=RuntimeError("airmon-ng stop timed out")), \
++             patch("sys.stderr.write"):
++
++            mock_args.return_value = MagicMock(
++                interface="wlan0",
++                output=str(csv_path),
++                no_monitor_setup=False,
++            )
++
++            exit_code = wifi_scanner.main()
++            assert exit_code == 1
++
++            assert status_path.exists()
++            status_data = json.loads(status_path.read_text(encoding="utf-8"))
++            assert status_data["state"] == "error"
++            # Since cleanup failed, monitor interface remains identified
++            assert status_data["interface"] == "wlan0mon"
++
++
++def test_main_cleanup_failure_reports_error_and_does_not_claim_success():
++    """Test that if the scanner finishes cleanly but cleanup fails, main exits with 1 and does not claim success."""
++    with tempfile.TemporaryDirectory() as tmpdir:
++        csv_path = Path(tmpdir) / "scan.csv"
++        status_path = Path(tmpdir) / "scanner_status.json"
++
++        with patch("wifi_scanner._parse_args") as mock_args, \
++             patch("wifi_scanner.enable_monitor_mode", return_value="wlan0mon"), \
++             patch("wifi_scanner.get_enabled_channels", return_value=[1]), \
++             patch("wifi_scanner.scan_networks", return_value={}), \
++             patch("wifi_scanner.restore_managed_mode", side_effect=RuntimeError("Cleanup verification failed")), \
++             patch("builtins.print") as mock_print:
++
++            mock_args.return_value = MagicMock(
++                interface="wlan0",
++                output=str(csv_path),
++                no_monitor_setup=False,
++            )
++
++            with patch("wifi_scanner.save_to_csv"):
++                # Simulate Ctrl+C triggering stop_requested
++                def trigger_stop(*args, **kwargs):
++                    import signal
++                    handlers = signal.getsignal(signal.SIGINT)
++                    if callable(handlers):
++                        handlers(signal.SIGINT, None)
++                    return {}
++
++                with patch("wifi_scanner.scan_networks", side_effect=trigger_stop):
++                    exit_code = wifi_scanner.main()
++
++            assert exit_code == 1
++            # Ensure "Latest CSV saved successfully" was NOT printed
++            printed_messages = [call.args[0] for call in mock_print.call_args_list if call.args]
++            assert not any("Scanner stopped. Latest CSV saved successfully." in str(m) for m in printed_messages)
++
++            # Check status file
++            status_data = json.loads(status_path.read_text(encoding="utf-8"))
++            assert status_data["state"] == "error"
++            assert status_data["interface"] == "wlan0mon"
