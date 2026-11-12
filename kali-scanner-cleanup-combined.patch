@@ -1,5 +1,5 @@
 diff --git a/backend/scanner/wifi_scanner.py b/backend/scanner/wifi_scanner.py
-index 51f71df..33e5ee6 100644
+index 51f71df..6ae298b 100644
 --- a/backend/scanner/wifi_scanner.py
 +++ b/backend/scanner/wifi_scanner.py
 @@ -37,7 +37,7 @@ def _run_command(command: list[str], check: bool = True) -> subprocess.Completed
@@ -11,7 +11,7 @@ index 51f71df..33e5ee6 100644
          check=False,
      )
  
-@@ -120,29 +120,122 @@ def _require_command(command_name: str) -> None:
+@@ -120,29 +120,128 @@ def _require_command(command_name: str) -> None:
          raise RuntimeError(f"Required command not found: {command_name}")
  
  
@@ -80,9 +80,11 @@ index 51f71df..33e5ee6 100644
 +        if not monitor_interface and _interface_exists(f"{interface}mon"):
 +            monitor_interface = f"{interface}mon"
 +
++        cleaned = False
 +        if monitor_interface and monitor_interface != interface:
 +            try:
 +                restore_managed_mode(monitor_interface, original_interface=interface)
++                cleaned = True
 +            except Exception as cleanup_err:
 +                print(
 +                    f"Warning: error cleaning up {monitor_interface}: {cleanup_err}",
@@ -96,6 +98,7 @@ index 51f71df..33e5ee6 100644
 +        err = RuntimeError(error_msg)
 +        if monitor_interface:
 +            err.monitor_interface = monitor_interface
++        err.monitor_mode_cleaned = cleaned
 +        raise err from exc
 +    except Exception as exc:
 +        print(
@@ -107,9 +110,11 @@ index 51f71df..33e5ee6 100644
 +            if _interface_exists(f"{interface}mon"):
 +                cleanup_target = f"{interface}mon"
 +
++        cleaned = False
 +        if cleanup_target and cleanup_target != interface:
 +            try:
 +                restore_managed_mode(cleanup_target, original_interface=interface)
++                cleaned = True
 +            except Exception as cleanup_err:
 +                print(
 +                    f"Warning: error cleaning up {cleanup_target}: {cleanup_err}",
@@ -122,6 +127,7 @@ index 51f71df..33e5ee6 100644
 -    _verify_monitor_mode(monitor_interface)
 -    return monitor_interface
 +        exc.monitor_interface = cleanup_target
++        exc.monitor_mode_cleaned = cleaned
 +        raise
  
  
@@ -143,7 +149,7 @@ index 51f71df..33e5ee6 100644
              for token in reversed(tokens):
                  if token.startswith(interface) and token != interface:
                      return token
-@@ -150,12 +243,18 @@ def _parse_monitor_interface(airmon_output: str, interface: str) -> str:
+@@ -150,12 +249,18 @@ def _parse_monitor_interface(airmon_output: str, interface: str) -> str:
      candidate = f"{interface}mon"
      if _interface_exists(candidate):
          return candidate
@@ -163,7 +169,7 @@ index 51f71df..33e5ee6 100644
          return True
      except subprocess.CalledProcessError:
          return False
-@@ -163,37 +262,92 @@ def _interface_exists(interface: str) -> bool:
+@@ -163,37 +268,92 @@ def _interface_exists(interface: str) -> bool:
  
  def _verify_monitor_mode(interface: str) -> None:
      try:
@@ -278,7 +284,7 @@ index 51f71df..33e5ee6 100644
  
  
  def scan_networks(
-@@ -386,6 +540,15 @@ def main() -> int:
+@@ -386,6 +546,15 @@ def main() -> int:
      stop_requested = False
      monitor_interface: str | None = None
      monitor_mode_created = False
@@ -294,7 +300,7 @@ index 51f71df..33e5ee6 100644
  
      def request_stop(_signum: int, _frame: Any) -> None:
          nonlocal stop_requested
-@@ -400,18 +563,21 @@ def main() -> int:
+@@ -400,18 +569,22 @@ def main() -> int:
          if args.no_monitor_setup:
              monitor_interface = args.interface
          else:
@@ -309,7 +315,8 @@ index 51f71df..33e5ee6 100644
 +                    created_iface = f"{args.interface}mon"
 +                if created_iface:
 +                    monitor_interface = created_iface
-+                    monitor_mode_created = True
++                    if not getattr(init_exc, "monitor_mode_cleaned", False):
++                        monitor_mode_created = True
 +                raise
  
          print(f"Scanning on monitor interface: {monitor_interface}")
@@ -324,7 +331,7 @@ index 51f71df..33e5ee6 100644
  
          _write_scanner_status(
              status_path,
-@@ -492,24 +658,68 @@ def main() -> int:
+@@ -492,24 +665,68 @@ def main() -> int:
  
              _print_table(known_networks)
  
