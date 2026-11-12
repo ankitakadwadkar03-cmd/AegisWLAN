@@ -10,10 +10,11 @@ index 51f71df..33e5ee6 100644
 +        ["iw", "dev", interface, "set", "channel", str(channel)],
          check=False,
      )
-
+ 
 @@ -120,29 +120,122 @@ def _require_command(command_name: str) -> None:
          raise RuntimeError(f"Required command not found: {command_name}")
-
+ 
+ 
 +def _restart_network_services() -> None:
 +    """Attempt to restart standard networking services stopped by airmon-ng."""
 +    for service_name in ("NetworkManager", "wpa_supplicant"):
@@ -51,11 +52,11 @@ index 51f71df..33e5ee6 100644
 +
  def enable_monitor_mode(interface: str) -> str:
      """Enable monitor mode using airmon-ng and return the monitor interface name."""
-
+ 
 -    for command_name in ("iwconfig", "airmon-ng", "iw"):
 +    for command_name in ("airmon-ng", "iw"):
          _require_command(command_name)
-
+ 
 +    monitor_interface: str | None = None
      try:
          _run_command(["airmon-ng", "check", "kill"], check=False)
@@ -116,13 +117,14 @@ index 51f71df..33e5ee6 100644
 +                )
 +        else:
 +            _restart_network_services()
-
+ 
 -    monitor_interface = _parse_monitor_interface(result.stdout, interface)
 -    _verify_monitor_mode(monitor_interface)
 -    return monitor_interface
 +        exc.monitor_interface = cleanup_target
 +        raise
-
+ 
+ 
  def _parse_monitor_interface(airmon_output: str, interface: str) -> str:
      for line in airmon_output.splitlines():
 -        if "monitor mode" in line.lower() and "enabled" in line.lower():
@@ -152,7 +154,8 @@ index 51f71df..33e5ee6 100644
 +            return name
 +
      return interface
-
+ 
+ 
  def _interface_exists(interface: str) -> bool:
      try:
 -        _run_command(["iwconfig", interface])
@@ -161,7 +164,7 @@ index 51f71df..33e5ee6 100644
      except subprocess.CalledProcessError:
          return False
 @@ -163,37 +262,92 @@ def _interface_exists(interface: str) -> bool:
-
+ 
  def _verify_monitor_mode(interface: str) -> None:
      try:
 -        result = _run_command(["iwconfig", interface])
@@ -176,7 +179,7 @@ index 51f71df..33e5ee6 100644
 +        raise RuntimeError(
 +            f"Could not verify interface {interface}: {details}"
 +        ) from exc
-
+ 
 -    if "mode:monitor" not in result.stdout.lower().replace(" ", ""):
 -        raise RuntimeError(f"Interface {interface} is not in monitor mode.")
 +    detected_type: str | None = None
@@ -185,20 +188,20 @@ index 51f71df..33e5ee6 100644
 +        if line.startswith("type "):
 +            detected_type = line.split(" ", 1)[1].strip()
 +            break
-
+ 
 +    if detected_type != "monitor":
 +        type_str = detected_type if detected_type is not None else "unknown"
 +        raise RuntimeError(
 +            f"Interface {interface} is not in monitor mode (detected type: {type_str})."
 +        )
-
+ 
 -def restore_managed_mode(interface: str) -> None:
 -    """Disable monitor mode and restart normal WiFi services."""
 -    result = _run_command(
 -        ["airmon-ng", "stop", interface],
 -        check=False,
 -    )
-
+ 
 -    if result.returncode != 0:
 -        details = result.stderr.strip() or result.stdout.strip()
 +def restore_managed_mode(interface: str, original_interface: str | None = None) -> None:
@@ -230,7 +233,7 @@ index 51f71df..33e5ee6 100644
          )
 +    finally:
 +        _restart_network_services()
-
+ 
 -    # airmon-ng check kill may stop these normal WiFi services.
 -    _run_command(
 -        ["systemctl", "start", "NetworkManager"],
@@ -272,7 +275,8 @@ index 51f71df..33e5ee6 100644
 +        )
 +        print(f"Error: {diag_msg}", file=sys.stderr)
 +        raise RuntimeError(diag_msg)
-
+ 
+ 
  def scan_networks(
 @@ -386,6 +540,15 @@ def main() -> int:
      stop_requested = False
@@ -287,7 +291,7 @@ index 51f71df..33e5ee6 100644
 +    last_sweep_completed_at: str | None = None
 +    scanner_exception: Exception | None = None
 +    cleanup_exception: Exception | None = None
-
+ 
      def request_stop(_signum: int, _frame: Any) -> None:
          nonlocal stop_requested
 @@ -400,18 +563,21 @@ def main() -> int:
@@ -307,9 +311,9 @@ index 51f71df..33e5ee6 100644
 +                    monitor_interface = created_iface
 +                    monitor_mode_created = True
 +                raise
-
+ 
          print(f"Scanning on monitor interface: {monitor_interface}")
-
+ 
          scan_channels = get_enabled_channels(monitor_interface)
 -        status_path = (
 -            Path(args.output).parent
@@ -317,13 +321,13 @@ index 51f71df..33e5ee6 100644
 -        )
 -        sweep_number = 0
 -        last_sweep_completed_at = None
-
+ 
          _write_scanner_status(
              status_path,
 @@ -492,24 +658,68 @@ def main() -> int:
-
+ 
              _print_table(known_networks)
-
+ 
 -    except PermissionError:
 +    except PermissionError as exc:
 +        scanner_exception = exc
@@ -389,10 +393,9 @@ index 51f71df..33e5ee6 100644
 +            file=sys.stderr,
 +        )
 +        return 1
-
+ 
      print("\nScanner stopped. Latest CSV saved successfully.")
      return 0
-
 diff --git a/backend/test_wifi_scanner.py b/backend/test_wifi_scanner.py
 new file mode 100644
 index 0000000..acd2146
