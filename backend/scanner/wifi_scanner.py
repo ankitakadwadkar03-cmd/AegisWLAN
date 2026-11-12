@@ -37,7 +37,7 @@ def _run_command(command: list[str], check: bool = True) -> subprocess.Completed
 def set_channel(interface: str, channel: int) -> bool:
     """Switch the wireless interface to a WiFi channel."""
     result = _run_command(
-        ["iwconfig", interface, "channel", str(channel)],
+        ["iw", "dev", interface, "set", "channel", str(channel)],
         check=False,
     )
 
@@ -120,23 +120,50 @@ def _require_command(command_name: str) -> None:
         raise RuntimeError(f"Required command not found: {command_name}")
 
 
+def _restart_network_services() -> None:
+    """Attempt to restart standard networking services stopped by airmon-ng."""
+    for service_name in ("NetworkManager", "wpa_supplicant"):
+        try:
+            _run_command(
+                ["systemctl", "start", service_name],
+                check=False,
+            )
+        except Exception as exc:
+            print(
+                f"Warning: unable to restart {service_name}: {exc}",
+                file=sys.stderr,
+            )
+
+
 def enable_monitor_mode(interface: str) -> str:
     """Enable monitor mode using airmon-ng and return the monitor interface name."""
 
-    for command_name in ("iwconfig", "airmon-ng", "iw"):
+    for command_name in ("airmon-ng", "iw"):
         _require_command(command_name)
 
     try:
         _run_command(["airmon-ng", "check", "kill"], check=False)
         result = _run_command(["airmon-ng", "start", interface])
+        monitor_interface = _parse_monitor_interface(result.stdout, interface)
+        _verify_monitor_mode(monitor_interface)
+        return monitor_interface
     except subprocess.CalledProcessError as exc:
-        raise RuntimeError(
-            f"Could not enable monitor mode for {interface}: {exc.stderr.strip() or exc.stdout.strip()}"
-        ) from exc
-
-    monitor_interface = _parse_monitor_interface(result.stdout, interface)
-    _verify_monitor_mode(monitor_interface)
-    return monitor_interface
+        details = (
+            exc.stderr.strip()
+            or exc.stdout.strip()
+            or "command failed"
+        )
+        error_msg = f"Could not enable monitor mode for {interface}: {details}"
+        print(f"Error: {error_msg}", file=sys.stderr)
+        _restart_network_services()
+        raise RuntimeError(error_msg) from exc
+    except Exception as exc:
+        print(
+            f"Error: could not enable monitor mode for {interface}: {exc}",
+            file=sys.stderr,
+        )
+        _restart_network_services()
+        raise
 
 
 def _parse_monitor_interface(airmon_output: str, interface: str) -> str:
@@ -155,7 +182,7 @@ def _parse_monitor_interface(airmon_output: str, interface: str) -> str:
 
 def _interface_exists(interface: str) -> bool:
     try:
-        _run_command(["iwconfig", interface])
+        _run_command(["iw", "dev", interface, "info"])
         return True
     except subprocess.CalledProcessError:
         return False
@@ -163,37 +190,52 @@ def _interface_exists(interface: str) -> bool:
 
 def _verify_monitor_mode(interface: str) -> None:
     try:
-        result = _run_command(["iwconfig", interface])
+        result = _run_command(["iw", "dev", interface, "info"])
     except subprocess.CalledProcessError as exc:
-        raise RuntimeError(f"Could not verify interface {interface}: {exc.stderr.strip()}") from exc
+        details = (
+            exc.stderr.strip()
+            or exc.stdout.strip()
+            or "command failed"
+        )
+        raise RuntimeError(
+            f"Could not verify interface {interface}: {details}"
+        ) from exc
 
-    if "mode:monitor" not in result.stdout.lower().replace(" ", ""):
-        raise RuntimeError(f"Interface {interface} is not in monitor mode.")
+    detected_type: str | None = None
+    for raw_line in result.stdout.splitlines():
+        line = raw_line.strip()
+        if line.startswith("type "):
+            detected_type = line.split(" ", 1)[1].strip()
+            break
+
+    if detected_type != "monitor":
+        type_str = detected_type if detected_type is not None else "unknown"
+        raise RuntimeError(
+            f"Interface {interface} is not in monitor mode (detected type: {type_str})."
+        )
 
 
 def restore_managed_mode(interface: str) -> None:
     """Disable monitor mode and restart normal WiFi services."""
-    result = _run_command(
-        ["airmon-ng", "stop", interface],
-        check=False,
-    )
+    try:
+        result = _run_command(
+            ["airmon-ng", "stop", interface],
+            check=False,
+        )
 
-    if result.returncode != 0:
-        details = result.stderr.strip() or result.stdout.strip()
+        if result.returncode != 0:
+            details = result.stderr.strip() or result.stdout.strip()
+            print(
+                f"Warning: could not restore {interface}: {details}",
+                file=sys.stderr,
+            )
+    except Exception as exc:
         print(
-            f"Warning: could not restore {interface}: {details}",
+            f"Warning: error stopping monitor interface {interface}: {exc}",
             file=sys.stderr,
         )
 
-    # airmon-ng check kill may stop these normal WiFi services.
-    _run_command(
-        ["systemctl", "start", "NetworkManager"],
-        check=False,
-    )
-    _run_command(
-        ["systemctl", "start", "wpa_supplicant"],
-        check=False,
-    )
+    _restart_network_services()
 
 
 def scan_networks(
@@ -386,6 +428,13 @@ def main() -> int:
     stop_requested = False
     monitor_interface: str | None = None
     monitor_mode_created = False
+    status_path = (
+        Path(args.output).parent
+        / "scanner_status.json"
+    )
+    scan_channels: list[int] = []
+    sweep_number = 0
+    last_sweep_completed_at: str | None = None
 
     def request_stop(_signum: int, _frame: Any) -> None:
         nonlocal stop_requested
@@ -406,12 +455,6 @@ def main() -> int:
         print(f"Scanning on monitor interface: {monitor_interface}")
 
         scan_channels = get_enabled_channels(monitor_interface)
-        status_path = (
-            Path(args.output).parent
-            / "scanner_status.json"
-        )
-        sweep_number = 0
-        last_sweep_completed_at = None
 
         _write_scanner_status(
             status_path,
@@ -506,10 +549,37 @@ def main() -> int:
         return 1
     finally:
         if monitor_mode_created and monitor_interface:
-            print(
-                f"Restoring {monitor_interface} to managed mode..."
+            try:
+                print(
+                    f"Restoring {monitor_interface} to managed mode..."
+                )
+                restore_managed_mode(monitor_interface)
+            except Exception as exc:
+                print(
+                    f"Warning: error restoring {monitor_interface}: {exc}",
+                    file=sys.stderr,
+                )
+
+        try:
+            _write_scanner_status(
+                status_path,
+                state="stopped",
+                interface=None,
+                sweep_number=sweep_number,
+                current_channel=None,
+                channels_completed=(
+                    0 if stop_requested else len(scan_channels)
+                ),
+                total_channels=len(scan_channels),
+                enabled_channels=scan_channels,
+                session_network_count=len(known_networks),
+                last_sweep_completed_at=last_sweep_completed_at,
             )
-            restore_managed_mode(monitor_interface)
+        except Exception as exc:
+            print(
+                f"Warning: unable to write final scanner status: {exc}",
+                file=sys.stderr,
+            )
 
     print("\nScanner stopped. Latest CSV saved successfully.")
     return 0
