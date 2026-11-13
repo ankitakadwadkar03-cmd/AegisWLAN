@@ -135,12 +135,33 @@ def _restart_network_services() -> None:
             )
 
 
+def _get_interfaces_state() -> dict[str, str]:
+    """Return a mapping of wireless interface names to their type (mode) from iw dev."""
+    result = _run_command(["iw", "dev"], check=False)
+    if result.returncode != 0:
+        return {}
+
+    interfaces: dict[str, str] = {}
+    current_iface: str | None = None
+
+    for raw_line in result.stdout.splitlines():
+        line = raw_line.strip()
+        if line.startswith("Interface "):
+            current_iface = line.split(" ", 1)[1].strip()
+            interfaces[current_iface] = "unknown"
+        elif current_iface and line.startswith("type "):
+            interfaces[current_iface] = line.split(" ", 1)[1].strip()
+
+    return interfaces
+
+
 def enable_monitor_mode(interface: str) -> str:
     """Enable monitor mode using airmon-ng and return the monitor interface name."""
 
     for command_name in ("airmon-ng", "iw"):
         _require_command(command_name)
 
+    monitor_interface: str | None = None
     try:
         _run_command(["airmon-ng", "check", "kill"], check=False)
         result = _run_command(["airmon-ng", "start", interface])
@@ -153,23 +174,74 @@ def enable_monitor_mode(interface: str) -> str:
             or exc.stdout.strip()
             or "command failed"
         )
+        if exc.stdout:
+            parsed = _parse_monitor_interface(exc.stdout, interface)
+            if parsed != interface:
+                monitor_interface = parsed
+        if not monitor_interface and _interface_exists(f"{interface}mon"):
+            monitor_interface = f"{interface}mon"
+
+        cleaned = False
+        if monitor_interface and monitor_interface != interface:
+            try:
+                restore_managed_mode(monitor_interface, original_interface=interface)
+                cleaned = True
+            except Exception as cleanup_err:
+                print(
+                    f"Warning: error cleaning up {monitor_interface}: {cleanup_err}",
+                    file=sys.stderr,
+                )
+        else:
+            _restart_network_services()
+
         error_msg = f"Could not enable monitor mode for {interface}: {details}"
         print(f"Error: {error_msg}", file=sys.stderr)
-        _restart_network_services()
-        raise RuntimeError(error_msg) from exc
+        err = RuntimeError(error_msg)
+        if monitor_interface:
+            err.monitor_interface = monitor_interface
+        err.monitor_mode_cleaned = cleaned
+        raise err from exc
     except Exception as exc:
         print(
             f"Error: could not enable monitor mode for {interface}: {exc}",
             file=sys.stderr,
         )
-        _restart_network_services()
+        cleanup_target = monitor_interface
+        if not cleanup_target or cleanup_target == interface:
+            if _interface_exists(f"{interface}mon"):
+                cleanup_target = f"{interface}mon"
+
+        cleaned = False
+        if cleanup_target and cleanup_target != interface:
+            try:
+                restore_managed_mode(cleanup_target, original_interface=interface)
+                cleaned = True
+            except Exception as cleanup_err:
+                print(
+                    f"Warning: error cleaning up {cleanup_target}: {cleanup_err}",
+                    file=sys.stderr,
+                )
+        else:
+            _restart_network_services()
+
+        exc.monitor_interface = cleanup_target
+        exc.monitor_mode_cleaned = cleaned
         raise
 
 
 def _parse_monitor_interface(airmon_output: str, interface: str) -> str:
     for line in airmon_output.splitlines():
-        if "monitor mode" in line.lower() and "enabled" in line.lower():
-            tokens = line.replace(")", " ").replace("(", " ").split()
+        lowered = line.lower()
+        if "monitor mode" in lowered and "enabled" in lowered:
+            cleaned_line = (
+                line.replace(")", " ")
+                .replace("(", " ")
+                .replace("[", " ")
+                .replace("]", " ")
+                .replace(":", " ")
+                .replace(",", " ")
+            )
+            tokens = cleaned_line.split()
             for token in reversed(tokens):
                 if token.startswith(interface) and token != interface:
                     return token
@@ -177,6 +249,12 @@ def _parse_monitor_interface(airmon_output: str, interface: str) -> str:
     candidate = f"{interface}mon"
     if _interface_exists(candidate):
         return candidate
+
+    interfaces_state = _get_interfaces_state()
+    for name, mode in interfaces_state.items():
+        if mode == "monitor" and (name == candidate or (name.startswith(interface) and name != interface)):
+            return name
+
     return interface
 
 
@@ -215,27 +293,67 @@ def _verify_monitor_mode(interface: str) -> None:
         )
 
 
-def restore_managed_mode(interface: str) -> None:
-    """Disable monitor mode and restart normal WiFi services."""
+def restore_managed_mode(interface: str, original_interface: str | None = None) -> None:
+    """Disable monitor mode, verify interface restoration with iw dev, and restart WiFi services."""
+    if original_interface is None:
+        if interface.endswith("mon"):
+            original_interface = interface[:-3]
+        else:
+            original_interface = interface
+
+    airmon_output = ""
     try:
         result = _run_command(
             ["airmon-ng", "stop", interface],
             check=False,
         )
-
+        airmon_output = (result.stderr.strip() or result.stdout.strip() or "")
         if result.returncode != 0:
-            details = result.stderr.strip() or result.stdout.strip()
             print(
-                f"Warning: could not restore {interface}: {details}",
+                f"Warning: could not restore {interface}: {airmon_output}",
                 file=sys.stderr,
             )
     except Exception as exc:
+        airmon_output = f"Execution error: {exc}"
         print(
             f"Warning: error stopping monitor interface {interface}: {exc}",
             file=sys.stderr,
         )
+    finally:
+        _restart_network_services()
 
-    _restart_network_services()
+    # Verify the resulting wireless interface state using iw dev
+    verified = False
+    interfaces_state: dict[str, str] = {}
+    deadline = time.monotonic() + 1.5
+
+    while True:
+        interfaces_state = _get_interfaces_state()
+
+        if interface != original_interface:
+            monitor_removed = interface not in interfaces_state
+        else:
+            monitor_removed = interfaces_state.get(interface) != "monitor"
+
+        orig_managed = interfaces_state.get(original_interface) == "managed"
+
+        if monitor_removed and orig_managed:
+            verified = True
+            break
+
+        if time.monotonic() >= deadline:
+            break
+        time.sleep(0.1)
+
+    if not verified:
+        state_repr = ", ".join(f"{k}={v}" for k, v in interfaces_state.items()) if interfaces_state else "none"
+        diag_msg = (
+            f"Automatic restoration failed for monitor interface '{interface}' (target managed: '{original_interface}'). "
+            f"airmon-ng stop output: '{airmon_output}'. "
+            f"Detected interface state: [{state_repr}]."
+        )
+        print(f"Error: {diag_msg}", file=sys.stderr)
+        raise RuntimeError(diag_msg)
 
 
 def scan_networks(
@@ -435,6 +553,8 @@ def main() -> int:
     scan_channels: list[int] = []
     sweep_number = 0
     last_sweep_completed_at: str | None = None
+    scanner_exception: Exception | None = None
+    cleanup_exception: Exception | None = None
 
     def request_stop(_signum: int, _frame: Any) -> None:
         nonlocal stop_requested
@@ -449,8 +569,18 @@ def main() -> int:
         if args.no_monitor_setup:
             monitor_interface = args.interface
         else:
-            monitor_interface = enable_monitor_mode(args.interface)
-            monitor_mode_created = True
+            try:
+                monitor_interface = enable_monitor_mode(args.interface)
+                monitor_mode_created = True
+            except Exception as init_exc:
+                created_iface = getattr(init_exc, "monitor_interface", None)
+                if not created_iface and _interface_exists(f"{args.interface}mon"):
+                    created_iface = f"{args.interface}mon"
+                if created_iface:
+                    monitor_interface = created_iface
+                    if not getattr(init_exc, "monitor_mode_cleaned", False):
+                        monitor_mode_created = True
+                raise
 
         print(f"Scanning on monitor interface: {monitor_interface}")
 
@@ -535,16 +665,23 @@ def main() -> int:
 
             _print_table(known_networks)
 
-    except PermissionError:
+    except PermissionError as exc:
+        scanner_exception = exc
         print(
             "Permission denied. Run this scanner with sudo/root privileges.",
             file=sys.stderr,
         )
         return 1
     except RuntimeError as exc:
+        scanner_exception = exc
         print(f"Error: {exc}", file=sys.stderr)
         return 1
+    except KeyboardInterrupt as exc:
+        scanner_exception = exc
+        print("\nScan interrupted by user.", file=sys.stderr)
+        return 0
     except Exception as exc:
+        scanner_exception = exc
         print(f"Unexpected error: {exc}", file=sys.stderr)
         return 1
     finally:
@@ -553,18 +690,21 @@ def main() -> int:
                 print(
                     f"Restoring {monitor_interface} to managed mode..."
                 )
-                restore_managed_mode(monitor_interface)
+                restore_managed_mode(monitor_interface, original_interface=args.interface)
             except Exception as exc:
+                cleanup_exception = exc
                 print(
                     f"Warning: error restoring {monitor_interface}: {exc}",
                     file=sys.stderr,
                 )
 
         try:
+            status_state = "error" if (scanner_exception or cleanup_exception) else "stopped"
+            status_interface = monitor_interface if cleanup_exception else None
             _write_scanner_status(
                 status_path,
-                state="stopped",
-                interface=None,
+                state=status_state,
+                interface=status_interface,
                 sweep_number=sweep_number,
                 current_channel=None,
                 channels_completed=(
@@ -580,6 +720,13 @@ def main() -> int:
                 f"Warning: unable to write final scanner status: {exc}",
                 file=sys.stderr,
             )
+
+    if cleanup_exception:
+        print(
+            f"Error: automatic monitor-mode cleanup failed for {monitor_interface}: {cleanup_exception}",
+            file=sys.stderr,
+        )
+        return 1
 
     print("\nScanner stopped. Latest CSV saved successfully.")
     return 0
