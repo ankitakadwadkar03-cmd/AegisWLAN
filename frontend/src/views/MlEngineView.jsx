@@ -16,6 +16,56 @@ import {
   IconInfo,
 } from '../components/Icons'
 
+const formatMetricPercent = (val, { assumeFractionalOne = false } = {}) => {
+  if (val === undefined || val === null || val === '') return '--'
+  const num = Number(val)
+  if (!Number.isFinite(num)) return '--'
+
+  // The backend history API returns metrics already scaled as percentages (e.g. 97.59, 77.78, 100, 87.5).
+  // Do not multiply percentage values by 100.
+  // If supporting fractional inputs strictly between 0 and 1, convert to percentage:
+  if (num > 0 && num < 1) {
+    return `${(num * 100).toFixed(2)}%`
+  }
+
+  // Handle the ambiguity of exactly 1 explicitly:
+  // In the percentage-based history API, 100 represents 100%, so 1 represents 1.00%.
+  // If assumeFractionalOne is true (e.g. if 1 is interpreted as fractional 1.0 = 100%),
+  // it would be 100.00%. Since the backend history API returns 100 for 100%,
+  // default to percentage space (1.00%) unless explicitly configured.
+  if (num === 1) {
+    return assumeFractionalOne ? '100.00%' : '1.00%'
+  }
+
+  return `${num.toFixed(2)}%`
+}
+
+const formatEvaluationDate = (value) => {
+  if (!value || value === 'Invalid Date' || value === 'null' || value === 'undefined') {
+    return '--'
+  }
+  try {
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) {
+      return '--'
+    }
+    return date.toLocaleString()
+  } catch {
+    return '--'
+  }
+}
+
+const getRunStatusBadge = (status) => {
+  const norm = String(status || '').toLowerCase()
+  if (norm === 'completed' || norm === 'success' || norm === 'resolved') {
+    return 'badge badge-status-resolved'
+  }
+  if (norm === 'failed' || norm === 'error') {
+    return 'badge badge-severity-high'
+  }
+  return 'badge badge-default'
+}
+
 export const MlEngineView = ({
   mlEngineTab,
   setMlEngineTab,
@@ -32,6 +82,7 @@ export const MlEngineView = ({
   mlSchemaInfo,
   setActiveView,
   networks = [],
+  mlTestRuns = [],
 }) => {
   const [selectedNetworkDetails, setSelectedNetworkDetails] = useState(null)
   const [showExtractedFeatures, setShowExtractedFeatures] = useState(false)
@@ -635,6 +686,93 @@ export const MlEngineView = ({
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+          </div>
+
+          {/* =========================================================================
+             EVALUATION HISTORY
+             ========================================================================= */}
+          <div className="panel" style={{ marginTop: '16px' }}>
+            <div className="panel-header">
+              <div>
+                <h3 className="section-title">Evaluation History</h3>
+                <p className="panel-subtitle">
+                  Historical record of offline benchmark runs executed against AWID3 datasets.
+                </p>
+              </div>
+              <span className="badge badge-default">
+                {mlTestRuns.length} {mlTestRuns.length === 1 ? 'Run' : 'Runs'}
+              </span>
+            </div>
+
+            {mlTestRuns && mlTestRuns.length > 0 ? (
+              <div className="table-wrap" style={{ marginTop: '12px' }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Run ID</th>
+                      <th>Dataset Name</th>
+                      <th>Evaluation Date &amp; Time</th>
+                      <th>Total Samples</th>
+                      <th>Accuracy</th>
+                      <th>Precision</th>
+                      <th>Recall</th>
+                      <th>F1-Score</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {mlTestRuns.map((run, idx) => {
+                      const runId = run.id ?? idx + 1
+                      const datasetName = run.dataset_name || run.dataset_path || 'Unknown'
+                      const evalDate = run.evaluated_at || run.created_at
+                      const totalSamples =
+                        run.total_samples !== undefined && run.total_samples !== null
+                          ? Number(run.total_samples).toLocaleString()
+                          : '--'
+                      const accuracy = run.accuracy ?? run.metrics?.accuracy
+                      const precision = run.precision ?? run.metrics?.precision
+                      const recall = run.recall ?? run.metrics?.recall
+                      const f1 = run.f1_score ?? run.metrics?.f1_score
+                      const status = run.status || 'completed'
+
+                      return (
+                        <tr key={run.id ?? `${datasetName}-${evalDate}-${idx}`}>
+                          <td className="mono-val">#{runId}</td>
+                          <td>
+                            <strong>{datasetName}</strong>
+                          </td>
+                          <td>{formatEvaluationDate(evalDate)}</td>
+                          <td className="mono-val">{totalSamples}</td>
+                          <td className="mono-val" style={{ color: 'var(--success-text)' }}>
+                            {formatMetricPercent(accuracy)}
+                          </td>
+                          <td className="mono-val">{formatMetricPercent(precision)}</td>
+                          <td className="mono-val">{formatMetricPercent(recall)}</td>
+                          <td className="mono-val">{formatMetricPercent(f1)}</td>
+                          <td>
+                            <span className={getRunStatusBadge(status)}>
+                              {status}
+                            </span>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="empty-state" style={{ padding: '36px 16px', textAlign: 'center' }}>
+                <div className="empty-state-icon" style={{ opacity: 0.5, marginBottom: '8px' }}>
+                  <IconFileSearch size={32} />
+                </div>
+                <p className="empty-state-title" style={{ fontWeight: 600, fontSize: '14px', marginBottom: '4px', color: 'var(--text-strong)' }}>
+                  No Evaluation History Available
+                </p>
+                <p className="empty-state-text" style={{ fontSize: '12.5px', color: 'var(--text-muted)', margin: 0 }}>
+                  Run a benchmark test on an offline dataset above to record model evaluation metrics.
+                </p>
               </div>
             )}
           </div>
